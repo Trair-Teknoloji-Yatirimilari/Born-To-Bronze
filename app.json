@@ -1,29 +1,56 @@
 {
   "expo": {
-    "name": "bronze-cream",
+    "name": "Bronze Cream",
     "slug": "bronze-cream",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bronzecream.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Bronze Cream uygulamasının kameranıza erişmesine izin verin",
+        "NSPhotoLibraryUsageDescription": "Bronze Cream uygulamasının fotoğraflarınıza erişmesine izin verin",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.bronzecream.app",
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Bronze Cream uygulamasının kameranıza erişmesine izin verin"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2043acd9-9368-4c64-b5c8-cecf0a1b52bb"
+      }
     }
   }
 }
