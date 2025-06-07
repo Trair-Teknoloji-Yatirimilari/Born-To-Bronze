@@ -507,7 +507,7 @@ const PhotoEditScreen = () => {
               </View>
             </View>
           )}
-        </View>
+    </View>
       </ScrollView>
     </LinearGradient>
   );
