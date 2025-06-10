@@ -54,10 +54,63 @@ const DEFAULT_BRUSH_RADIUS = 20;
 const BRUSH_COLOR = "rgba(0,255,0,0.3)";
 let BRUSH_RADIUS = DEFAULT_BRUSH_RADIUS;
 let BRUSH_RADIUS_SQ = BRUSH_RADIUS * BRUSH_RADIUS;
-const DOWNSCALE_SIZE = 80; // Küçültme boyutu (80x80)
+const DOWNSCALE_SIZE = 160; // Daha yüksek çözünürlük için artırıldı
 
-function isPointNearAny(points, x, y, radius = BRUSH_RADIUS) {
-  return points.some((p) => (p.x - x) ** 2 + (p.y - y) ** 2 < radius * radius);
+// İki nokta arasındaki mesafeyi hesaplayan fonksiyon
+function distance(x1, y1, x2, y2) {
+  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+}
+
+// İki nokta arasına ara noktalar ekleyen fonksiyon
+function interpolatePoints(x1, y1, x2, y2) {
+  const points = [];
+  const dist = distance(x1, y1, x2, y2);
+  const steps = Math.max(Math.floor(dist / (BRUSH_RADIUS / 2)), 1);
+  
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    points.push({
+      x: x1 + (x2 - x1) * t,
+      y: y1 + (y2 - y1) * t
+    });
+  }
+  return points;
+}
+
+// Noktaları optimize eden fonksiyon
+function optimizePoints(points) {
+  if (points.length <= 2) return points;
+  
+  const optimized = [points[0]];
+  const minDistance = BRUSH_RADIUS / 2;
+  
+  for (let i = 1; i < points.length; i++) {
+    const lastPoint = optimized[optimized.length - 1];
+    const currentPoint = points[i];
+    
+    if (distance(lastPoint.x, lastPoint.y, currentPoint.x, currentPoint.y) >= minDistance) {
+      optimized.push(currentPoint);
+    }
+  }
+  
+  return optimized;
+}
+
+// Noktaları birleştiren fonksiyon
+function mergePaths(paths) {
+  const allPoints = paths.flat();
+  const uniquePoints = new Set();
+  const mergedPoints = [];
+  
+  allPoints.forEach(point => {
+    const key = `${Math.round(point.x)},${Math.round(point.y)}`;
+    if (!uniquePoints.has(key)) {
+      uniquePoints.add(key);
+      mergedPoints.push(point);
+    }
+  });
+  
+  return optimizePoints(mergedPoints);
 }
 
 const PhotoEditScreen = () => {
@@ -78,6 +131,7 @@ const PhotoEditScreen = () => {
     visible: false,
     handleCanvas: null,
   });
+  const [lastPoint, setLastPoint] = useState(null);
 
   // Fırça boyutunu güncelleme fonksiyonu
   const updateBrushSize = (size) => {
@@ -143,36 +197,63 @@ const PhotoEditScreen = () => {
 
   const onGestureEvent = (event) => {
     const { x, y } = event.nativeEvent;
-    if (eraseMode) {
-      console.log("Silme modu: Nokta siliniyor", x, y);
-      setPaths((prevPaths) =>
-        prevPaths
-          .map((path) =>
-            path.filter(
-              (p) => (p.x - x) ** 2 + (p.y - y) ** 2 > BRUSH_RADIUS_SQ
-            )
-          )
-          .filter((path) => path.length > 0)
-      );
-    } else {
-      const allPoints = paths.flat();
-      if (!isPointNearAny(allPoints, x, y)) {
-        console.log("Alan seçiliyor: Nokta eklendi", x, y);
-        setCurrentPath([...currentPath, { x, y }]);
-      }
+    // Ekran sınırlarını kontrol et
+    if (
+      x < 0 ||
+      x > Dimensions.get("window").width - 40 ||
+      y < 0 ||
+      y > 400
+    ) {
+      return;
     }
+
+    if (lastPoint) {
+      // Son nokta ile şimdiki nokta arasına ara noktalar ekle
+      const newPoints = interpolatePoints(lastPoint.x, lastPoint.y, x, y);
+      setCurrentPath(prev => optimizePoints([...prev, ...newPoints]));
+    } else {
+      setCurrentPath([{ x, y }]);
+    }
+    
+    setLastPoint({ x, y });
+  };
+
+  const onGestureStart = () => {
+    setIsDrawing(true);
+    setLastPoint(null);
   };
 
   const onGestureEnd = () => {
+    setIsDrawing(false);
     if (currentPath.length > 0) {
-      console.log(
-        "Çizim tamamlandı, path kaydedildi:",
-        currentPath.length,
-        "noktadan oluşuyor"
-      );
-      setPaths([...paths, currentPath]);
+      // Mevcut path'i paths'e ekle ve optimize et
+      const optimizedPaths = mergePaths([...paths, currentPath]);
+      setPaths([optimizedPaths]);
       setCurrentPath([]);
     }
+    setLastPoint(null);
+  };
+
+  // Silme modu için yeni fonksiyon
+  const handleErase = (x, y) => {
+    if (!eraseMode) return;
+
+    const newPaths = paths.map(path => 
+      path.filter(point => {
+        const dx = point.x - x;
+        const dy = point.y - y;
+        return dx * dx + dy * dy >= BRUSH_RADIUS_SQ;
+      })
+    ).filter(path => path.length > 0);
+
+    setPaths(newPaths);
+  };
+
+  // Silme modu için gesture handler
+  const onEraseGestureEvent = (event) => {
+    if (!eraseMode) return;
+    const { x, y } = event.nativeEvent;
+    handleErase(x, y);
   };
 
   const applyBronzeEffect = async () => {
@@ -271,27 +352,39 @@ const PhotoEditScreen = () => {
     // Siyah ve beyazı ve çok koyu/açık renkleri filtrele
     const filtered = rgbArray.filter(([r, g, b]) => {
       const sum = r + g + b;
-      // Tam siyah, tam beyaz, çok koyu (<60), çok açık (>700) renkleri çıkar
+      // Tam siyah, tam beyaz, çok koyu (<80), çok açık (>650) renkleri çıkar
       if (
         (r === 0 && g === 0 && b === 0) ||
         (r === 255 && g === 255 && b === 255)
       )
         return false;
-      if (sum < 60 || sum > 700) return false;
+      if (sum < 80 || sum > 650) return false;
       return true;
     });
     if (filtered.length === 0) return [200, 160, 120]; // fallback: açık ten rengi
-    const colorCount = {};
+    
+    // Renk gruplarını oluştur (benzer renkleri birleştir)
+    const colorGroups = {};
+    filtered.forEach(([r, g, b]) => {
+      // Renkleri 10'ar birimlik gruplara ayır
+      const groupR = Math.floor(r / 10) * 10;
+      const groupG = Math.floor(g / 10) * 10;
+      const groupB = Math.floor(b / 10) * 10;
+      const key = `${groupR},${groupG},${groupB}`;
+      colorGroups[key] = (colorGroups[key] || 0) + 1;
+    });
+
+    // En çok tekrar eden rengi bul
     let maxColor = null;
     let maxCount = 0;
-    filtered.forEach(([r, g, b]) => {
-      const key = `${r},${g},${b}`;
-      colorCount[key] = (colorCount[key] || 0) + 1;
-      if (colorCount[key] > maxCount) {
-        maxCount = colorCount[key];
+    Object.entries(colorGroups).forEach(([key, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        const [r, g, b] = key.split(',').map(Number);
         maxColor = [r, g, b];
       }
     });
+
     return maxColor;
   }
 
@@ -312,15 +405,16 @@ const PhotoEditScreen = () => {
   function getAverageColor(rgbArray) {
     const filtered = rgbArray.filter(([r, g, b]) => {
       const sum = r + g + b;
-      // Griye yakın renkleri filtrele
-      if (Math.abs(r - g) < 10 && Math.abs(g - b) < 10 && Math.abs(b - r) < 10)
+      // Griye yakın renkleri filtreleme eşiği artırıldı
+      if (Math.abs(r - g) < 15 && Math.abs(g - b) < 15 && Math.abs(b - r) < 15)
         return false;
       if (
         (r === 0 && g === 0 && b === 0) ||
         (r === 255 && g === 255 && b === 255)
       )
         return false;
-      if (sum < 100 || sum > 700) return false;
+      // Renk aralığı filtrelemesi daraltıldı
+      if (sum < 150 || sum > 650) return false;
       return true;
     });
     if (filtered.length === 0) return [200, 160, 120];
@@ -337,15 +431,20 @@ const PhotoEditScreen = () => {
 
   // Mask noktalarını crop ve küçültülmüş görsele göre normalize et
   function getNormalizedMask(paths, bbox, cropRect, downscaleSize) {
-    // paths: [{x, y}, ...] or [[{x, y}, ...], ...]
     const allPoints = paths.flat();
     const mask = allPoints.map(({ x, y }) => {
       // Önce crop alanına göre normalize et
       const relX = x - bbox.minX;
       const relY = y - bbox.minY;
-      // Crop alanı orijinal görselde scaleX/scaleY ile büyütüldü, şimdi downscaleSize'a oranla küçült
-      const normX = (relX / (bbox.maxX - bbox.minX)) * downscaleSize;
-      const normY = (relY / (bbox.maxY - bbox.minY)) * downscaleSize;
+      
+      // Orijinal görsel boyutlarına göre ölçekle
+      const scaleX = cropRect.width / (bbox.maxX - bbox.minX);
+      const scaleY = cropRect.height / (bbox.maxY - bbox.minY);
+      
+      // Küçültülmüş görsele göre normalize et
+      const normX = (relX * scaleX * downscaleSize) / cropRect.width;
+      const normY = (relY * scaleY * downscaleSize) / cropRect.height;
+      
       return [Math.round(normX), Math.round(normY)];
     });
     return mask;
@@ -370,6 +469,7 @@ const PhotoEditScreen = () => {
       // Görsel boyutunu al
       const imgWidth = Dimensions.get("window").width - 40;
       const imgHeight = 400;
+      
       // Seçili alanın bounding box'unu bul
       const bbox = getBoundingBox(paths);
       if (!bbox) throw new Error("Seçili alan yok");
@@ -378,24 +478,32 @@ const PhotoEditScreen = () => {
         Alert.alert("Uyarı", "Daha büyük bir alan seçmelisiniz.");
         return;
       }
-      // Oranları orijinal görsele göre hesapla (ImageManipulator orijinal çözünürlükte çalışır)
+
+      // Orijinal görsel boyutlarını al
       const manipMeta = await ImageManipulator.manipulateAsync(image, [], {
         base64: false,
       });
       const origWidth = manipMeta.width;
       const origHeight = manipMeta.height;
+      
+      // Ekrandaki görsel ile orijinal görsel arasındaki ölçek oranlarını hesapla
       const scaleX = origWidth / imgWidth;
       const scaleY = origHeight / imgHeight;
+      
+      // Crop koordinatlarını hesapla
       let originX = Math.max(Math.round(bbox.minX * scaleX), 0);
       let originY = Math.max(Math.round(bbox.minY * scaleY), 0);
       let width = Math.max(Math.round((bbox.maxX - bbox.minX) * scaleX), 1);
       let height = Math.max(Math.round((bbox.maxY - bbox.minY) * scaleY), 1);
+      
+      // Sınırları kontrol et
       if (originX + width > origWidth) width = origWidth - originX;
       if (originY + height > origHeight) height = origHeight - originY;
-      if (width < 1 || height < 1)
-        throw new Error("Seçili alan çok küçük veya geçersiz.");
+      if (width < 1 || height < 1) throw new Error("Seçili alan çok küçük veya geçersiz.");
+      
       const cropRect = { originX, originY, width, height };
-      // Crop ve küçültme işlemi (daha fazla piksel için DOWNSCALE_SIZE)
+      
+      // Crop ve küçültme işlemi
       const manipulated = await ImageManipulator.manipulateAsync(
         image,
         [
@@ -404,19 +512,26 @@ const PhotoEditScreen = () => {
         ],
         { base64: true, format: ImageManipulator.SaveFormat.JPEG }
       );
+      
       // Mask noktalarını normalize et
       const mask = getNormalizedMask(paths, bbox, cropRect, DOWNSCALE_SIZE);
+      
       // Base64'ün başındaki data:image/jpeg;base64, kısmını temizle
-      const base64 = manipulated.base64.replace(
-        /^data:image\/(png|jpeg);base64,/,
-        ""
-      );
+      const base64 = manipulated.base64.replace(/^data:image\/(png|jpeg);base64,/, "");
+      
       // Backend'e gönder
       const response = await fetch("http://10.0.2.2:5000/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64, mask }),
+        body: JSON.stringify({ 
+          base64, 
+          mask,
+          originalSize: { width: origWidth, height: origHeight },
+          cropSize: { width, height },
+          downscaleSize: DOWNSCALE_SIZE
+        }),
       });
+      
       if (!response.ok) throw new Error("Sunucu hatası: " + response.status);
       const { mod, avg } = await response.json();
       setSkinColor({ mod, avg, preview: manipulated.uri });
@@ -454,8 +569,10 @@ const PhotoEditScreen = () => {
           {image ? (
             <View style={styles.imageContainer}>
               <PanGestureHandler
-                onGestureEvent={onGestureEvent}
+                onGestureEvent={eraseMode ? onEraseGestureEvent : onGestureEvent}
+                onBegan={onGestureStart}
                 onEnded={onGestureEnd}
+                onCancelled={onGestureEnd}
               >
                 <View>
                   <Image
@@ -479,16 +596,15 @@ const PhotoEditScreen = () => {
                         />
                       ))
                     )}
-                    {currentPath.length > 0 &&
-                      currentPath.map((point, j) => (
-                        <Circle
-                          key={`c-${j}`}
-                          cx={point.x}
-                          cy={point.y}
-                          r={BRUSH_RADIUS}
-                          fill={BRUSH_COLOR}
-                        />
-                      ))}
+                    {currentPath.map((point, j) => (
+                      <Circle
+                        key={`c-${j}`}
+                        cx={point.x}
+                        cy={point.y}
+                        r={BRUSH_RADIUS}
+                        fill={BRUSH_COLOR}
+                      />
+                    ))}
                   </Svg>
                 </View>
               </PanGestureHandler>
@@ -889,7 +1005,7 @@ const styles = StyleSheet.create({
     height: 30,
   },
   eraseActive: {
-    backgroundColor: "green",
+    backgroundColor: "#4CAF50",
   },
 
   skinColorResult: {
