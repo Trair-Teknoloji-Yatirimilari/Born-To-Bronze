@@ -11,6 +11,7 @@ import {
   Dimensions,
   Modal,
   Animated,
+  Platform,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import * as ImagePicker from "expo-image-picker";
@@ -21,6 +22,7 @@ import { PanGestureHandler } from "react-native-gesture-handler";
 import { Buffer } from "buffer";
 import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system";
 
 const BRONZE_PRODUCTS = [
   {
@@ -113,6 +115,60 @@ function mergePaths(paths) {
   return optimizePoints(mergedPoints);
 }
 
+// Koordinatları normalize eden fonksiyon
+function normalizeCoordinates(paths, imageWidth, imageHeight) {
+  return paths.map(path =>
+    path.map(point => ({
+      x: point.x / imageWidth,
+      y: point.y / imageHeight
+    }))
+  );
+}
+
+// Koordinatları denormalize eden fonksiyon
+function denormalizeCoordinates(normalizedPaths, imageWidth, imageHeight) {
+  return normalizedPaths.map(path =>
+    path.map(point => ({
+      x: point.x * imageWidth,
+      y: point.y * imageHeight
+    }))
+  );
+}
+
+// Mask noktalarını optimize eden fonksiyon (2x2 grid ve tekrarları engelle)
+function optimizeMaskPoints(points, origWidth, origHeight, imgWidth, imgHeight, brushSize) {
+  const scaleX = origWidth / imgWidth;
+  const scaleY = origHeight / imgHeight;
+  const absBrush = Math.ceil(brushSize * scaleX);
+  const grid = new Set();
+  const mask = [];
+  points.forEach(pt => {
+    const absX = Math.round(pt.x * scaleX);
+    const absY = Math.round(pt.y * scaleY);
+    for (let dy = -absBrush; dy <= absBrush; dy += 2) {
+      for (let dx = -absBrush; dx <= absBrush; dx += 2) {
+        if (dx * dx + dy * dy <= absBrush * absBrush) {
+          const gx = Math.floor((absX + dx) / 2) * 2;
+          const gy = Math.floor((absY + dy) / 2) * 2;
+          const key = `${gx},${gy}`;
+          if (!grid.has(key)) {
+            grid.add(key);
+            mask.push({ x: gx, y: gy });
+          }
+        }
+      }
+    }
+  });
+  return mask;
+}
+
+const API_URL = __DEV__ 
+  ? Platform.select({
+      ios: 'http://localhost:5000',
+      android: 'http://10.0.2.2:5000'
+    })
+  : 'https://your-production-api.com';
+
 const PhotoEditScreen = () => {
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -132,6 +188,10 @@ const PhotoEditScreen = () => {
     handleCanvas: null,
   });
   const [lastPoint, setLastPoint] = useState(null);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+  const [brushPos, setBrushPos] = useState(null);
+  const [filterColor, setFilterColor] = useState(null); // Demo için seçili alanın üstüne uygulanacak renk
+  const [filteredModal, setFilteredModal] = useState({ visible: false, url: null });
 
   // Fırça boyutunu güncelleme fonksiyonu
   const updateBrushSize = (size) => {
@@ -197,7 +257,7 @@ const PhotoEditScreen = () => {
 
   const onGestureEvent = (event) => {
     const { x, y } = event.nativeEvent;
-    // Ekran sınırlarını kontrol et
+    setBrushPos({ x, y });
     if (
       x < 0 ||
       x > Dimensions.get("window").width - 40 ||
@@ -206,87 +266,97 @@ const PhotoEditScreen = () => {
     ) {
       return;
     }
-
     if (lastPoint) {
-      // Son nokta ile şimdiki nokta arasına ara noktalar ekle
       const newPoints = interpolatePoints(lastPoint.x, lastPoint.y, x, y);
       setCurrentPath(prev => optimizePoints([...prev, ...newPoints]));
     } else {
       setCurrentPath([{ x, y }]);
     }
-    
     setLastPoint({ x, y });
   };
 
-  const onGestureStart = () => {
+  const onGestureStart = (event) => {
     setIsDrawing(true);
     setLastPoint(null);
+    if (event && event.nativeEvent) {
+      const { x, y } = event.nativeEvent;
+      setCurrentPath([{ x, y }]);
+      setBrushPos({ x, y });
+    }
   };
 
   const onGestureEnd = () => {
     setIsDrawing(false);
+    setBrushPos(null);
     if (currentPath.length > 0) {
-      // Mevcut path'i paths'e ekle ve optimize et
-      const optimizedPaths = mergePaths([...paths, currentPath]);
-      setPaths([optimizedPaths]);
+      // Mevcut path'i paths'e ayrı olarak ekle
+      setPaths(prev => [...prev, currentPath]);
       setCurrentPath([]);
     }
     setLastPoint(null);
   };
 
-  // Silme modu için yeni fonksiyon
+  // Silgi fonksiyonunu güncelliyorum
   const handleErase = (x, y) => {
     if (!eraseMode) return;
-
-    const newPaths = paths.map(path => 
+    // Dairesel alanı sil
+    const newPaths = paths.map(path =>
       path.filter(point => {
         const dx = point.x - x;
         const dy = point.y - y;
-        return dx * dx + dy * dy >= BRUSH_RADIUS_SQ;
+        return dx * dx + dy * dy >= brushSize * brushSize;
       })
     ).filter(path => path.length > 0);
-
     setPaths(newPaths);
   };
 
-  // Silme modu için gesture handler
+  // Silgi için gesture event
   const onEraseGestureEvent = (event) => {
-    if (!eraseMode) return;
     const { x, y } = event.nativeEvent;
+    setBrushPos({ x, y });
     handleErase(x, y);
   };
 
+  // Image yüklendiğinde boyutlarını al
+  const onImageLoad = (event) => {
+    const { width, height } = event.nativeEvent.source;
+    setImageDimensions({ width, height });
+  };
+
   const applyBronzeEffect = async () => {
-    if (!image) {
-      Alert.alert("Uyarı", "Lütfen önce bir fotoğraf seçin!");
+    if (!image || paths.length === 0) {
+      Alert.alert("Hata", "Lütfen bir fotoğraf seçin ve alan işaretleyin!");
       return;
     }
-
-    if (paths.length === 0) {
-      Alert.alert("Uyarı", "Lütfen önce bronzlaştırılacak alanı seçin!");
-      return;
-    }
-
-    if (!selectedProduct) {
-      Alert.alert("Uyarı", "Lütfen bir bronzlaştırıcı ürün seçin!");
-      return;
-    }
-
     setLoading(true);
     try {
-      const manipulatedImage = await ImageManipulator.manipulateAsync(
+      // Fotoğrafı küçült ve kaliteyi düşür
+      const manipMeta = await ImageManipulator.manipulateAsync(
         image,
-        [
-          {
-            tint: selectedProduct.color,
-            intensity: selectedProduct.intensity,
-          },
-        ],
-        { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+        [{ resize: { width: 800 } }],
+        { base64: true, compress: 0.7 }
       );
-      setImage(manipulatedImage.uri);
-    } catch (error) {
-      Alert.alert("Hata", "Fotoğraf düzenlenirken bir hata oluştu!");
+      const origWidth = manipMeta.width;
+      const origHeight = manipMeta.height;
+      const imgWidth = Dimensions.get("window").width - 40;
+      const imgHeight = 400;
+      const bbox = getBoundingBox(paths);
+      // Mask noktalarını optimize et
+      const mask = optimizeMaskPoints(paths.flat(), origWidth, origHeight, imgWidth, imgHeight, brushSize);
+      // Backend'e gönder
+      const response = await fetch(`${API_URL}/bronze-effect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64: manipMeta.base64, mask }),
+      });
+      const data = await response.json();
+      if (data && data.url) {
+        setFilteredModal({ visible: true, url: data.url });
+      } else {
+        Alert.alert("Hata", "Filtrelenmiş fotoğraf alınamadı.");
+      }
+    } catch (e) {
+      Alert.alert("Hata", "Filtre uygulanırken hata oluştu: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -318,76 +388,6 @@ const PhotoEditScreen = () => {
     ]);
   };  
 
-
-  
-  // Base64'ten RGB array çıkaran yardımcı fonksiyon
-  function getRGBArrayFromBase64(base64) {
-    console.log("Fonksiyon çağrıldı. Base64:", base64);
-    // PNG veya JPEG base64'ten doğrudan pikselleri almak mümkün değil, ancak küçük boyutlu (ör: 20x20) crop ile yaklaşık analiz yapılabilir.
-    // Burada base64'i decode edip, byte dizisinden RGB'leri çıkarıyoruz (sadece demo amaçlı, gerçek projede native çözüm önerilir)
-    // Bu fonksiyonun doğruluğu base64 formatına ve platforma göre değişebilir.
-    // Burada sadece örnek amaçlı, base64'i Buffer ile decode edip, RGB'leri tahmini olarak alıyoruz.
-    try {
-      const buffer = Buffer.from(base64, "base64");
-      // PNG ise ilk 8 byte header, JPEG ise farklı. Burada kaba bir şekilde RGB'leri arıyoruz.
-      // Gerçek projede pikselleri almak için native modül gerekir.
-      // Burada sadece demo amaçlı, buffer'da ardışık 3 byte'ı RGB olarak alıyoruz.
-      let rgbs = [];
-      for (let i = 0; i < buffer.length - 3; i += 4) {
-        const r = buffer[i];
-        const g = buffer[i + 1];
-        const b = buffer[i + 2];
-        if (r !== undefined && g !== undefined && b !== undefined) {
-          rgbs.push([r, g, b]);
-        }
-      }
-      return rgbs;
-    } catch (e) {
-      return [];
-    }
-  }
-
-  // En çok tekrar eden rengi bul
-  function getMostFrequentColor(rgbArray) {
-    // Siyah ve beyazı ve çok koyu/açık renkleri filtrele
-    const filtered = rgbArray.filter(([r, g, b]) => {
-      const sum = r + g + b;
-      // Tam siyah, tam beyaz, çok koyu (<80), çok açık (>650) renkleri çıkar
-      if (
-        (r === 0 && g === 0 && b === 0) ||
-        (r === 255 && g === 255 && b === 255)
-      )
-        return false;
-      if (sum < 80 || sum > 650) return false;
-      return true;
-    });
-    if (filtered.length === 0) return [200, 160, 120]; // fallback: açık ten rengi
-    
-    // Renk gruplarını oluştur (benzer renkleri birleştir)
-    const colorGroups = {};
-    filtered.forEach(([r, g, b]) => {
-      // Renkleri 10'ar birimlik gruplara ayır
-      const groupR = Math.floor(r / 10) * 10;
-      const groupG = Math.floor(g / 10) * 10;
-      const groupB = Math.floor(b / 10) * 10;
-      const key = `${groupR},${groupG},${groupB}`;
-      colorGroups[key] = (colorGroups[key] || 0) + 1;
-    });
-
-    // En çok tekrar eden rengi bul
-    let maxColor = null;
-    let maxCount = 0;
-    Object.entries(colorGroups).forEach(([key, count]) => {
-      if (count > maxCount) {
-        maxCount = count;
-        const [r, g, b] = key.split(',').map(Number);
-        maxColor = [r, g, b];
-      }
-    });
-
-    return maxColor;
-  }
-
   // Seçili alanı saran dikdörtgeni bul
   function getBoundingBox(paths) {
     const allPoints = paths.flat();
@@ -400,147 +400,6 @@ const PhotoEditScreen = () => {
     const maxY = Math.max(...ys) + BRUSH_RADIUS;
     return { minX, minY, maxX, maxY };
   }
-
-  // Ortalama renk hesaplama fonksiyonu
-  function getAverageColor(rgbArray) {
-    const filtered = rgbArray.filter(([r, g, b]) => {
-      const sum = r + g + b;
-      // Griye yakın renkleri filtreleme eşiği artırıldı
-      if (Math.abs(r - g) < 15 && Math.abs(g - b) < 15 && Math.abs(b - r) < 15)
-        return false;
-      if (
-        (r === 0 && g === 0 && b === 0) ||
-        (r === 255 && g === 255 && b === 255)
-      )
-        return false;
-      // Renk aralığı filtrelemesi daraltıldı
-      if (sum < 150 || sum > 650) return false;
-      return true;
-    });
-    if (filtered.length === 0) return [200, 160, 120];
-    const total = filtered.reduce(
-      (acc, [r, g, b]) => [acc[0] + r, acc[1] + g, acc[2] + b],
-      [0, 0, 0]
-    );
-    return [
-      Math.round(total[0] / filtered.length),
-      Math.round(total[1] / filtered.length),
-      Math.round(total[2] / filtered.length),
-    ];
-  }
-
-  // Mask noktalarını crop ve küçültülmüş görsele göre normalize et
-  function getNormalizedMask(paths, bbox, cropRect, downscaleSize) {
-    const allPoints = paths.flat();
-    const mask = allPoints.map(({ x, y }) => {
-      // Önce crop alanına göre normalize et
-      const relX = x - bbox.minX;
-      const relY = y - bbox.minY;
-      
-      // Orijinal görsel boyutlarına göre ölçekle
-      const scaleX = cropRect.width / (bbox.maxX - bbox.minX);
-      const scaleY = cropRect.height / (bbox.maxY - bbox.minY);
-      
-      // Küçültülmüş görsele göre normalize et
-      const normX = (relX * scaleX * downscaleSize) / cropRect.width;
-      const normY = (relY * scaleY * downscaleSize) / cropRect.height;
-      
-      return [Math.round(normX), Math.round(normY)];
-    });
-    return mask;
-  }
-
-  // Ten rengini bulma butonuna basınca
-  const handleFindSkinColor = () => {
-    if (!image || paths.length === 0) {
-      Alert.alert("Uyarı", "Lütfen önce fotoğraf seçip alanı işaretleyin!");
-      return;
-    }
-    findSkinColor();
-  };
-
-  const findSkinColor = async () => {
-    if (!image || paths.length === 0) {
-      Alert.alert("Uyarı", "Lütfen önce fotoğraf seçip alanı işaretleyin!");
-      return;
-    }
-    setFindingSkin(true);
-    try {
-      // Görsel boyutunu al
-      const imgWidth = Dimensions.get("window").width - 40;
-      const imgHeight = 400;
-      
-      // Seçili alanın bounding box'unu bul
-      const bbox = getBoundingBox(paths);
-      if (!bbox) throw new Error("Seçili alan yok");
-      if (bbox.maxX - bbox.minX < 20 || bbox.maxY - bbox.minY < 20) {
-        setFindingSkin(false);
-        Alert.alert("Uyarı", "Daha büyük bir alan seçmelisiniz.");
-        return;
-      }
-
-      // Orijinal görsel boyutlarını al
-      const manipMeta = await ImageManipulator.manipulateAsync(image, [], {
-        base64: false,
-      });
-      const origWidth = manipMeta.width;
-      const origHeight = manipMeta.height;
-      
-      // Ekrandaki görsel ile orijinal görsel arasındaki ölçek oranlarını hesapla
-      const scaleX = origWidth / imgWidth;
-      const scaleY = origHeight / imgHeight;
-      
-      // Crop koordinatlarını hesapla
-      let originX = Math.max(Math.round(bbox.minX * scaleX), 0);
-      let originY = Math.max(Math.round(bbox.minY * scaleY), 0);
-      let width = Math.max(Math.round((bbox.maxX - bbox.minX) * scaleX), 1);
-      let height = Math.max(Math.round((bbox.maxY - bbox.minY) * scaleY), 1);
-      
-      // Sınırları kontrol et
-      if (originX + width > origWidth) width = origWidth - originX;
-      if (originY + height > origHeight) height = origHeight - originY;
-      if (width < 1 || height < 1) throw new Error("Seçili alan çok küçük veya geçersiz.");
-      
-      const cropRect = { originX, originY, width, height };
-      
-      // Crop ve küçültme işlemi
-      const manipulated = await ImageManipulator.manipulateAsync(
-        image,
-        [
-          { crop: cropRect },
-          { resize: { width: DOWNSCALE_SIZE, height: DOWNSCALE_SIZE } },
-        ],
-        { base64: true, format: ImageManipulator.SaveFormat.JPEG }
-      );
-      
-      // Mask noktalarını normalize et
-      const mask = getNormalizedMask(paths, bbox, cropRect, DOWNSCALE_SIZE);
-      
-      // Base64'ün başındaki data:image/jpeg;base64, kısmını temizle
-      const base64 = manipulated.base64.replace(/^data:image\/(png|jpeg);base64,/, "");
-      
-      // Backend'e gönder
-      const response = await fetch("http://10.0.2.2:5000/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          base64, 
-          mask,
-          originalSize: { width: origWidth, height: origHeight },
-          cropSize: { width, height },
-          downscaleSize: DOWNSCALE_SIZE
-        }),
-      });
-      
-      if (!response.ok) throw new Error("Sunucu hatası: " + response.status);
-      const { mod, avg } = await response.json();
-      setSkinColor({ mod, avg, preview: manipulated.uri });
-    } catch (e) {
-      Alert.alert("Hata", `Ten rengi analizinde hata oluştu: ${e.message}`);
-    } finally {
-      setFindingSkin(false);
-    }
-  };
 
   return (
     <LinearGradient colors={["#FFE5B4", "#FFD700"]} style={styles.container}>
@@ -555,12 +414,12 @@ const PhotoEditScreen = () => {
             seçimleri silme modunda silebilirsiniz.
           </Text>
 
-          {findingSkin && (
+          {loading && (
             <Modal transparent visible animationType="fade">
               <View style={styles.loadingOverlay}>
                 <ActivityIndicator size="large" color="#CD7F32" />
                 <Text style={styles.loadingText}>
-                  Ten rengi analiz ediliyor...
+                  Bronz efekti uygulanıyor...
                 </Text>
               </View>
             </Modal>
@@ -568,45 +427,73 @@ const PhotoEditScreen = () => {
 
           {image ? (
             <View style={styles.imageContainer}>
+              <Image
+                ref={imageRef}
+                source={{ uri: image }}
+                style={styles.image}
+                onLoad={onImageLoad}
+              />
               <PanGestureHandler
                 onGestureEvent={eraseMode ? onEraseGestureEvent : onGestureEvent}
-                onBegan={onGestureStart}
-                onEnded={onGestureEnd}
-                onCancelled={onGestureEnd}
+                onHandlerStateChange={({ nativeEvent }) => {
+                  if (nativeEvent.state === 4) {
+                    onGestureEnd();
+                  } else if (nativeEvent.state === 2) {
+                    onGestureStart(nativeEvent);
+                  }
+                }}
               >
-                <View>
-                  <Image
-                    source={{ uri: image }}
-                    style={styles.image}
-                    ref={imageRef}
-                  />
-                  <Svg
-                    style={StyleSheet.absoluteFill}
-                    width={Dimensions.get("window").width - 40}
-                    height={400}
-                  >
-                    {paths.map((path, i) =>
-                      path.map((point, j) => (
-                        <Circle
-                          key={`p${i}-${j}`}
-                          cx={point.x}
-                          cy={point.y}
-                          r={BRUSH_RADIUS}
-                          fill={BRUSH_COLOR}
-                        />
-                      ))
-                    )}
-                    {currentPath.map((point, j) => (
-                      <Circle
-                        key={`c-${j}`}
-                        cx={point.x}
-                        cy={point.y}
-                        r={BRUSH_RADIUS}
-                        fill={BRUSH_COLOR}
+                <Animated.View style={StyleSheet.absoluteFill}>
+                  <Svg style={StyleSheet.absoluteFill}>
+                    {paths.map((path, index) => (
+                      <Path
+                        key={index}
+                        d={path.reduce((acc, point, i) => {
+                          if (i === 0) return `M ${point.x} ${point.y}`;
+                          return `${acc} L ${point.x} ${point.y}`;
+                        }, '') + (path.length > 2 ? ' Z' : '')}
+                        stroke={BRUSH_COLOR}
+                        strokeWidth={brushSize * 2}
+                        fill="rgba(0,255,0,0.10)"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
                       />
                     ))}
+                    {currentPath.length > 1 && (
+                      <Path
+                        d={currentPath.reduce((acc, point, i) => {
+                          if (i === 0) return `M ${point.x} ${point.y}`;
+                          return `${acc} L ${point.x} ${point.y}`;
+                        }, '')}
+                        stroke={BRUSH_COLOR}
+                        strokeWidth={brushSize * 2}
+                        fill="none"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                    )}
+                    {isDrawing && brushPos && !eraseMode && (
+                      <Circle
+                        cx={brushPos.x}
+                        cy={brushPos.y}
+                        r={brushSize}
+                        fill={BRUSH_COLOR}
+                        stroke="#00FF00"
+                        strokeWidth={2}
+                      />
+                    )}
+                    {isDrawing && brushPos && eraseMode && (
+                      <Circle
+                        cx={brushPos.x}
+                        cy={brushPos.y}
+                        r={brushSize}
+                        fill="rgba(255,0,0,0.15)"
+                        stroke="#FF0000"
+                        strokeWidth={2}
+                      />
+                    )}
                   </Svg>
-                </View>
+                </Animated.View>
               </PanGestureHandler>
 
               <View style={styles.floatingButtonContainer}>
@@ -617,22 +504,13 @@ const PhotoEditScreen = () => {
                   ]}
                   onPress={() => setEraseMode((v) => !v)}
                 >
-                  <Text style={styles.buttonText}>
-                    {eraseMode ? (
-                      <Ionicons
-                        name="arrow-undo"
-                        size={16}
-                        color={eraseMode ? "white" : "gray"}
-                      />
-                    ) : (
-                      <Ionicons
-                        name="arrow-undo"
-                        size={16}
-                        color={eraseMode ? "white" : "gray"}
-                      />
-                    )}
-                  </Text>
+                  <Ionicons
+                    name="brush"
+                    size={16}
+                    color={eraseMode ? "white" : "gray"}
+                  />
                 </TouchableOpacity>
+
                 {/* Fırça Kontrol Butonu */}
                 <TouchableOpacity
                   style={styles.floatingButton}
@@ -644,7 +522,8 @@ const PhotoEditScreen = () => {
                     color={"gray"}
                   />
                 </TouchableOpacity>
-                {/* //Sıfırla butonu */}
+
+                {/* Seçimi Temizle butonu */}
                 {image && (
                   <>
                     <TouchableOpacity
@@ -655,11 +534,9 @@ const PhotoEditScreen = () => {
                     </TouchableOpacity>
                   </>
                 )}
-                <TouchableOpacity style={styles.floatingButton}>
-                  <Ionicons name="information" size={24} color={"gray"} />
-                </TouchableOpacity>
               </View>
-              {/* //Kapat butonu Yani seçilen fotoğrafı kapat */}
+
+              {/* Fotoğrafı Kaldır butonu */}
               <TouchableOpacity
                 style={styles.floatingCloseButton}
                 onPress={clearImage}
@@ -683,168 +560,11 @@ const PhotoEditScreen = () => {
               <Ionicons name="camera" size={24} color={"white"} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleFindSkinColor}
-            disabled={findingSkin}
-          >
-            <Text style={styles.buttonText}>
-              {findingSkin ? "Ten Rengi Bulunuyor..." : "Ten Rengini Bul"}
-            </Text>
-          </TouchableOpacity>
-
-          {skinColor && (
-            <View style={styles.skinColorResult}>
-              <View style={{ alignItems: "center", marginRight: 10 }}>
-                <Image
-                  source={{ uri: skinColor.preview }}
-                  style={styles.previewBox}
-                />
-                <Text style={styles.previewLabel}>Seçili Alan</Text>
-              </View>
-              <View
-                style={[
-                  styles.skinColorBox,
-                  {
-                    backgroundColor: `rgb(${skinColor.mod[0]},${skinColor.mod[1]},${skinColor.mod[2]})`,
-                  },
-                ]}
-              />
-              <View style={{ flexDirection: "column", marginLeft: 10 }}>
-                <Text style={styles.skinColorText}>
-                  Mod (Baskın): RGB {skinColor.mod.join(", ")} | HEX #
-                  {skinColor.mod
-                    .map((x) => x.toString(16).padStart(2, "0"))
-                    .join("")
-                    .toUpperCase()}
-                </Text>
-                <View style={{ height: 6 }} />
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <View
-                    style={[
-                      styles.skinColorBox,
-                      {
-                        backgroundColor: `rgb(${skinColor.avg[0]},${skinColor.avg[1]},${skinColor.avg[2]})`,
-                        width: 30,
-                        height: 30,
-                        marginRight: 8,
-                      },
-                    ]}
-                  />
-                  <Text style={styles.skinColorText}>
-                    Ortalama: RGB {skinColor.avg.join(", ")} | HEX #
-                    {skinColor.avg
-                      .map((x) => x.toString(16).padStart(2, "0"))
-                      .join("")
-                      .toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Fırça Kontrolleri */}
-          <Animated.View
-            style={[
-              styles.brushControls,
-              {
-                transform: [
-                  {
-                    translateY: brushControlsAnimation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [200, 0],
-                    }),
-                  },
-                ],
-                opacity: brushControlsAnimation,
-              },
-            ]}
-          >
-            <View style={styles.brushControlsHeader}>
-              <Text style={styles.brushControlsTitle}>Fırça Ayarları</Text>
-              <TouchableOpacity
-                onPress={toggleBrushControls}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color={COLORS.background} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.brushSizeContainer}>
-              <Text style={styles.brushSizeText}>
-                Fırça Boyutu: {Math.round(brushSize)}px
-              </Text>
-              <Slider
-                style={styles.brushSlider}
-                minimumValue={MIN_BRUSH_RADIUS}
-                maximumValue={MAX_BRUSH_RADIUS}
-                value={brushSize}
-                onValueChange={updateBrushSize}
-                minimumTrackTintColor={COLORS.primary}
-                maximumTrackTintColor={COLORS.secondary}
-                thumbTintColor={COLORS.primary}
-              />
-            </View>
-
-            <View style={styles.brushPresets}>
-              <TouchableOpacity
-                style={[
-                  styles.brushPreset,
-                  brushSize === 10 && styles.selectedPreset,
-                ]}
-                onPress={() => updateBrushSize(10)}
-              >
-                <Text style={styles.brushPresetText}>İnce</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.brushPreset,
-                  brushSize === 20 && styles.selectedPreset,
-                ]}
-                onPress={() => updateBrushSize(20)}
-              >
-                <Text style={styles.brushPresetText}>Orta</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.brushPreset,
-                  brushSize === 30 && styles.selectedPreset,
-                ]}
-                onPress={() => updateBrushSize(30)}
-              >
-                <Text style={styles.brushPresetText}>Kalın</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-          <View style={styles.productContainer}>
-            <Text style={styles.productTitle}>Bronzlaştırıcı Ürünler</Text>
-            <View style={styles.productList}>
-              {BRONZE_PRODUCTS.map((product) => (
-                <TouchableOpacity
-                  key={product.id}
-                  style={[
-                    styles.productButton,
-                    selectedProduct?.id === product.id &&
-                      styles.selectedProduct,
-                  ]}
-                  onPress={() => setSelectedProduct(product)}
-                >
-                  <View
-                    style={[
-                      styles.productColor,
-                      { backgroundColor: product.color },
-                    ]}
-                  />
-                  <Text style={styles.productName}>{product.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
 
           <TouchableOpacity
             style={[styles.button, styles.bronzeButton]}
             onPress={applyBronzeEffect}
-            disabled={loading}
+            disabled={loading || !image || paths.length === 0}
           >
             {loading ? (
               <ActivityIndicator color="#FFF" />
@@ -854,6 +574,104 @@ const PhotoEditScreen = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Filtrelenmiş fotoğraf modalı */}
+      <Modal
+        visible={filteredModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilteredModal({ visible: false, url: null })}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Image
+              source={{ uri: `${API_URL}${filteredModal.url}` }}
+              style={styles.modalImage}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setFilteredModal({ visible: false, url: null })}
+            >
+              <Text style={styles.modalButtonText}>Kapat</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Fırça kontrolleri */}
+      <Animated.View
+        style={[
+          styles.brushControls,
+          {
+            transform: [
+              {
+                translateY: brushControlsAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [200, 0],
+                }),
+              },
+            ],
+            opacity: brushControlsAnimation,
+          },
+        ]}
+      >
+        <View style={styles.brushControlsHeader}>
+          <Text style={styles.brushControlsTitle}>Fırça Ayarları</Text>
+          <TouchableOpacity
+            onPress={toggleBrushControls}
+            style={styles.closeButton}
+          >
+            <Ionicons name="close" size={24} color={COLORS.background} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.brushSizeContainer}>
+          <Text style={styles.brushSizeText}>
+            Fırça Boyutu: {Math.round(brushSize)}px
+          </Text>
+          <Slider
+            style={styles.brushSlider}
+            minimumValue={MIN_BRUSH_RADIUS}
+            maximumValue={MAX_BRUSH_RADIUS}
+            value={brushSize}
+            onValueChange={updateBrushSize}
+            minimumTrackTintColor={COLORS.primary}
+            maximumTrackTintColor={COLORS.secondary}
+            thumbTintColor={COLORS.primary}
+          />
+        </View>
+
+        <View style={styles.brushPresets}>
+          <TouchableOpacity
+            style={[
+              styles.brushPreset,
+              brushSize === 10 && styles.selectedPreset,
+            ]}
+            onPress={() => updateBrushSize(10)}
+          >
+            <Text style={styles.brushPresetText}>İnce</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.brushPreset,
+              brushSize === 20 && styles.selectedPreset,
+            ]}
+            onPress={() => updateBrushSize(20)}
+          >
+            <Text style={styles.brushPresetText}>Orta</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.brushPreset,
+              brushSize === 30 && styles.selectedPreset,
+            ]}
+            onPress={() => updateBrushSize(30)}
+          >
+            <Text style={styles.brushPresetText}>Kalın</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
     </LinearGradient>
   );
 };
@@ -927,6 +745,7 @@ const styles = StyleSheet.create({
   },
   bronzeButton: {
     backgroundColor: "#CD7F32",
+    width: "90%",
   },
   buttonText: {
     color: "#FFF",
@@ -934,127 +753,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     letterSpacing: 0.5,
   },
-  productContainer: {
-    width: "100%",
-    marginVertical: 10,
-  },
-  productTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#8B4513",
-    marginBottom: 10,
-  },
-  productList: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  productButton: {
-    flex: 1,
-    minWidth: "30%",
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: "#FFF",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#8B4513",
-  },
-  selectedProduct: {
-    backgroundColor: "#FFE5B4",
-    borderWidth: 2,
-  },
-  productColor: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginBottom: 5,
-  },
-  productName: {
-    fontSize: 12,
-    color: "#8B4513",
-    textAlign: "center",
-  },
-  floatingButtonContainer: {
-    position: "absolute",
-    left: 5,
-    top: 10,
-    flexDirection: "column",
-    justifyContent: "center",
-    gap: 10,
-    alignItems: "center",
-    // backgroundColor: "red",
-    zIndex: 1000,
-  },
-  floatingButton: {
-    backgroundColor: "transparent",
-    width: 30,
-    height: 30,
-    borderRadius: 25,
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "gray",
-    alignItems: "center",
-  },
-  floatingCloseButton: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    backgroundColor: "transparent",
-    width: 30,
-    height: 30,
-  },
-  eraseActive: {
-    backgroundColor: "#4CAF50",
-  },
-
-  skinColorResult: {
-    flexDirection: "column",
-    alignItems: "center",
-    marginVertical: 16,
-    gap: 10,
-    backgroundColor: "#FFF8E1",
-    borderRadius: 10,
-    padding: 10,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 1,
-  },
-  skinColorBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#333",
-    marginRight: 5,
-  },
-  skinColorText: {
-    fontSize: 14,
-    color: "#333",
-    marginBottom: 2,
-    fontWeight: "500",
-  },
-  desc: {
-    fontSize: 15,
-    color: "#6B4F1D",
-    textAlign: "center",
-    marginBottom: 10,
-    marginTop: -10,
-    fontStyle: "italic",
-    letterSpacing: 0.2,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 10,
-    width: "100%",
-    justifyContent: "center",
-  },
   loadingOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1067,35 +768,35 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  previewBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#333",
-    marginBottom: 2,
-  },
-  previewLabel: {
-    fontSize: 11,
-    color: "#6B4F1D",
-    textAlign: "center",
-    marginTop: 2,
-    fontStyle: "italic",
-  },
-  brushSizeIndicator: {
-    position: "absolute",
-    top: SIZES.padding * 2,
-    right: SIZES.padding * 2,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: SIZES.padding,
-    borderRadius: SIZES.radius,
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
     alignItems: "center",
   },
-  brushPreview: {
-    backgroundColor: BRUSH_COLOR,
-    borderRadius: 100,
-    borderWidth: 2,
-    borderColor: COLORS.background,
+  modalContent: {
+    width: "90%",
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    padding: 20,
+    alignItems: "center",
+  },
+  modalImage: {
+    width: "100%",
+    height: 400,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  modalButton: {
+    backgroundColor: "#CD7F32",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  modalButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   brushControls: {
     position: "absolute",
@@ -1153,6 +854,38 @@ const styles = StyleSheet.create({
     ...FONTS.medium,
     color: COLORS.background,
   },
+  floatingButtonContainer: {
+    position: "absolute",
+    left: 5,
+    top: 10,
+    flexDirection: "column",
+    justifyContent: "center",
+    gap: 10,
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  floatingButton: {
+    backgroundColor: "transparent",
+    width: 30,
+    height: 30,
+    borderRadius: 25,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "gray",
+    alignItems: "center",
+  },
+  floatingCloseButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "transparent",
+    width: 30,
+    height: 30,
+  },
+  eraseActive: {
+    backgroundColor: "#4CAF50",
+  },
 });
 
 export default PhotoEditScreen;
+
