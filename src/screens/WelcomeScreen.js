@@ -14,7 +14,7 @@ const WelcomeScreen = ({ navigation }) => {
         style={styles.gradient}
       >
         <View style={styles.container}>
-          <Text style={styles.title}>Bronze Cream</Text>
+          <Text style={styles.title}>Bronzify</Text>
           <Text style={styles.subtitle}>
             Bronzlaştırıcı kremlerinizi önizleyin
           </Text>
@@ -75,19 +75,19 @@ const styles = StyleSheet.create({
     gap: SIZES.padding,
   },
   button: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.button,
     padding: SIZES.padding,
     borderRadius: SIZES.radius,
     alignItems: 'center',
-    width: '100%',
+    width: '100vw',
   },
   secondaryButton: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: COLORS.button,
   },
   buttonText: {
     ...FONTS.medium,
     fontSize: SIZES.medium,
-    color: COLORS.background,
+    color: COLORS.text,
   },
 });
 

@@ -1,21 +1,28 @@
+// export const COLORS = {
+//   primary: '#FFB74D', // Turuncu-altın tonu
+//   secondary: '#4FC3F7', // Turkuaz
+//   background: '#FFFFFF',
+//   text: '#333333',
+//   lightText: '#666666',
+//   success: '#4CAF50',
+//   error: '#F44336',
+//   warning: '#FFC107',
+//   bronze: {
+//     light: '#D2B48C', // Açık bronz
+//     medium: '#CD7F32', // Orta bronz
+//     dark: '#8B4513', // Koyu bronz
+//   },
+//   gradient: {
+//     start: '#FFB74D',
+//     end: '#4FC3F7',
+//   }
+// };
+
 export const COLORS = {
-  primary: '#FFB74D', // Turuncu-altın tonu
-  secondary: '#4FC3F7', // Turkuaz
-  background: '#FFFFFF',
-  text: '#333333',
-  lightText: '#666666',
-  success: '#4CAF50',
-  error: '#F44336',
-  warning: '#FFC107',
-  bronze: {
-    light: '#D2B48C', // Açık bronz
-    medium: '#CD7F32', // Orta bronz
-    dark: '#8B4513', // Koyu bronz
-  },
-  gradient: {
-    start: '#FFB74D',
-    end: '#4FC3F7',
-  }
+  background: "#F4EBD0",
+  text: "#5C3A21",
+  button: "#FFC857",
+  active: "#FF6B6B",
 };
 
 export const SIZES = {
@@ -32,15 +39,15 @@ export const SIZES = {
 
 export const FONTS = {
   regular: {
-    fontFamily: 'System',
-    fontWeight: 'normal',
+    fontFamily: "System",
+    fontWeight: "normal",
   },
   medium: {
-    fontFamily: 'System',
-    fontWeight: '500',
+    fontFamily: "System",
+    fontWeight: "500",
   },
   bold: {
-    fontFamily: 'System',
-    fontWeight: 'bold',
+    fontFamily: "System",
+    fontWeight: "bold",
   },
-}; 
+};
