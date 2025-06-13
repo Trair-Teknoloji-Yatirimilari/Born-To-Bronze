@@ -18,22 +18,7 @@ const WelcomeScreen = ({ navigation }) => {
           <Text style={styles.subtitle}>
             Bronzlaştırıcı kremlerinizi önizleyin
           </Text>
-
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => navigation.navigate('RealTime')}
-            >
-              <Text style={styles.buttonText}>Gerçek Zamanlı Önizleme</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.secondaryButton]}
-              onPress={() => navigation.navigate('PhotoEdit')}
-            >
-              <Text style={styles.buttonText}>Fotoğraf Düzenleme</Text>
-            </TouchableOpacity>
-          </View>
+          {/* //TODO: Buraya databaseden gelen rastgele 10 fotoğraf background olarak aşağıdan yukarıya kayar vaziyette gösterilecek  */}
         </View>
       </LinearGradient>
     </ImageBackground>
