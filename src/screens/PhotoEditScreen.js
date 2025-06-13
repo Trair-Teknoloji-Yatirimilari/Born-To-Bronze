@@ -62,7 +62,7 @@ function optimizePoints(points, brush) {
   if (points.length <= 2) return points;
 
   const optimized = [points[0]];
-  const minDistance = (brush || BRUSH_RADIUS) / 4;
+  const minDistance = (brush || BRUSH_RADIUS) / 6;
 
   for (let i = 1; i < points.length; i++) {
     const lastPoint = optimized[optimized.length - 1];
@@ -280,6 +280,7 @@ const PhotoEditScreen = () => {
         const k=`${Math.round(pt.x)},${Math.round(pt.y)}`;
         return !paintedRef.current.has(k);
       });
+      newPoints.forEach(pt=>paintedRef.current.add(`${Math.round(pt.x)},${Math.round(pt.y)}`));
       setCurrentPath((prev) => ({ ...prev, points: optimizePoints([...prev.points, ...newPoints], brushSize) }));
     } else {
       setCurrentPath({ points: [{ x, y }], brush: brushSize });
@@ -292,7 +293,13 @@ const PhotoEditScreen = () => {
     setLastPoint(null);
     if (event && event.nativeEvent) {
       const { x, y } = event.nativeEvent;
-      setCurrentPath({ points: [{ x, y }], brush: brushSize });
+      const key = `${Math.round(x)},${Math.round(y)}`;
+      if (!paintedRef.current.has(key)) {
+        setCurrentPath({ points: [{ x, y }], brush: brushSize });
+        paintedRef.current.add(key); // ilk pikseli kilitle
+      } else {
+        setCurrentPath({ points: [], brush: brushSize });
+      }
       setBrushPos({ x, y });
     }
   };
@@ -363,16 +370,25 @@ const PhotoEditScreen = () => {
       const containerWidth = displaySize.width || origWidth;
       const containerHeight = displaySize.height || origHeight;
 
-      const allPoints = paths.flatMap((p)=>p.points);
-      // Mask noktalarını optimize et
-      const mask = optimizeMaskPoints(
-        allPoints,
-        origWidth,
-        origHeight,
-        containerWidth,
-        containerHeight,
-        brushSize
-      );
+      // Her path için kendi fırça boyutuna göre mask noktalarını hesapla
+      const maskSet = new Set();
+      paths.forEach(p=>{
+        const m = optimizeMaskPoints(
+          p.points,
+          origWidth,
+          origHeight,
+          containerWidth,
+          containerHeight,
+          p.brush
+        );
+        m.forEach(pt=>{
+          maskSet.add(`${pt.x},${pt.y}`);
+        });
+      });
+      const mask = Array.from(maskSet).map(k=>{
+        const [x,y] = k.split(',').map(Number);
+        return {x,y};
+      });
 
       const formData = new FormData();
       formData.append("image", {
@@ -907,14 +923,15 @@ const styles = StyleSheet.create({
   },
   brushControls: {
     position: "absolute",
-    bottom: 0,
     left: 0,
     right: 0,
-    top:'50%',
-    backgroundColor: "rgba(0,0,0,0.9)",
-    borderTopLeftRadius: SIZES.radius * 2,
-    borderTopRightRadius: SIZES.radius * 2,
+    bottom: 0,
+    paddingBottom: SIZES.padding + 20,
+    backgroundColor: "#1a1a1a",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: SIZES.padding,
+    maxHeight: "60%",
   },
   brushControlsHeader: {
     flexDirection: "row",
@@ -1032,6 +1049,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
   },
+  canvasCard: {
+    width: "90%",
+    aspectRatio: 3 / 4,
+    alignSelf: "center",
+    borderRadius: 12,
+    overflow: "hidden",
+    marginVertical: 10,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  canvasImg: { width: "100%", height: "100%" },
 });
 
 export default PhotoEditScreen;
