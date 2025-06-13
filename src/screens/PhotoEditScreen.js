@@ -121,18 +121,32 @@ function optimizeMaskPoints(
   points,
   origWidth,
   origHeight,
-  imgWidth,
-  imgHeight,
+  containerWidth,
+  containerHeight,
   brushSize
 ) {
-  const scaleX = origWidth / imgWidth;
-  const scaleY = origHeight / imgHeight;
-  const absBrush = Math.ceil(brushSize * scaleX);
+  // Görüntünün ekranda görünür boyutlarını hesapla (contain)
+  const scale = Math.min(containerWidth / origWidth, containerHeight / origHeight);
+  const displayWidth = origWidth * scale;
+  const displayHeight = origHeight * scale;
+  const offsetX = (containerWidth - displayWidth) / 2;
+  const offsetY = (containerHeight - displayHeight) / 2;
+
+  // Ekrandaki fırça yarıçapını orijinal piksele dönüştür
+  const absBrush = Math.ceil(brushSize / scale);
+
   const grid = new Set();
   const mask = [];
+
   points.forEach((pt) => {
-    const absX = Math.round(pt.x * scaleX);
-    const absY = Math.round(pt.y * scaleY);
+    // Letterbox bölgelerini çıkar
+    const relX = pt.x - offsetX;
+    const relY = pt.y - offsetY;
+    if (relX < 0 || relY < 0 || relX > displayWidth || relY > displayHeight) return;
+
+    const absX = Math.round(relX / scale);
+    const absY = Math.round(relY / scale);
+
     for (let dy = -absBrush; dy <= absBrush; dy += 2) {
       for (let dx = -absBrush; dx <= absBrush; dx += 2) {
         if (dx * dx + dy * dy <= absBrush * absBrush) {
@@ -176,16 +190,14 @@ const PhotoEditScreen = () => {
     handleCanvas: null,
   });
   const [lastPoint, setLastPoint] = useState(null);
-  const [imageDimensions, setImageDimensions] = useState({
-    width: 0,
-    height: 0,
-  });
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [brushPos, setBrushPos] = useState(null);
   const [filterColor, setFilterColor] = useState(null); // Demo için seçili alanın üstüne uygulanacak renk
   const [filteredModal, setFilteredModal] = useState({
     visible: false,
     url: null,
   });
+  const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
 
   // Fırça boyutunu güncelleme fonksiyonu
   const updateBrushSize = (size) => {
@@ -220,8 +232,9 @@ const PhotoEditScreen = () => {
       quality: 1,
     });
     if (!result.canceled) {
-      console.log("Fotoğraf seçildi:", result.assets[0].uri);
-      setImage(result.assets[0].uri);
+      const asset = result.assets[0];
+      setImage(asset.uri);
+      setImageDimensions({ width: asset.width, height: asset.height });
       setPaths([]);
       setCurrentPath([]);
       setSelectedProduct(null);
@@ -241,8 +254,9 @@ const PhotoEditScreen = () => {
       quality: 1,
     });
     if (!result.canceled) {
-      console.log("Fotoğraf çekildi:", result.assets[0].uri);
-      setImage(result.assets[0].uri);
+      const asset = result.assets[0];
+      setImage(asset.uri);
+      setImageDimensions({ width: asset.width, height: asset.height });
       setPaths([]);
       setCurrentPath([]);
       setSelectedProduct(null);
@@ -321,35 +335,50 @@ const PhotoEditScreen = () => {
     }
     setLoading(true);
     try {
-      // Fotoğrafı küçült ve kaliteyi düşür
-      const manipMeta = await ImageManipulator.manipulateAsync(
-        image,
-        [{ resize: { width: 800 } }],
-        { base64: true, compress: 0.7 }
-      );
+      // Eğer manipülasyon yapılacaksa, yeni boyutları da güncelle
+      let manipMeta = { uri: image, width: imageDimensions.width, height: imageDimensions.height };
+      // Eğer yeniden boyutlandırma istiyorsanız, burayı açabilirsiniz:
+      // manipMeta = await ImageManipulator.manipulateAsync(
+      //   image,
+      //   [{ resize: { width: 800 } }],
+      //   { base64: true, compress: 0.7 }
+      // );
+      // setImageDimensions({ width: manipMeta.width, height: manipMeta.height });
+
       const origWidth = manipMeta.width;
       const origHeight = manipMeta.height;
-      const imgWidth = Dimensions.get("window").width - 40;
-      const imgHeight = 400;
-      const bbox = getBoundingBox(paths);
+      const containerWidth = displaySize.width || origWidth;
+      const containerHeight = displaySize.height || origHeight;
+
       // Mask noktalarını optimize et
       const mask = optimizeMaskPoints(
         paths.flat(),
         origWidth,
         origHeight,
-        imgWidth,
-        imgHeight,
+        containerWidth,
+        containerHeight,
         brushSize
       );
-      // Backend'e gönder
-      const response = await fetch(`${API_URL}/bronze-effect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64: manipMeta.base64, mask }),
+
+      const formData = new FormData();
+      formData.append("image", {
+        uri: manipMeta.uri,
+        name: "photo.jpg",
+        type: "image/jpeg",
       });
-      const data = await response.json();
-      if (data && data.url) {
-        setFilteredModal({ visible: true, url: data.url });
+      formData.append("mask", JSON.stringify(mask));
+      formData.append("selectedProduct", JSON.stringify(selectedProduct));
+
+      const response = await fetch(`${API_URL}/bronze-effect`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        // Görüntüyü göster
+        const imageUrl = `${API_URL}${result.imageUrl}`;
+        setFilteredModal({ visible: true, url: imageUrl });
       } else {
         Alert.alert("Hata", "Filtrelenmiş fotoğraf alınamadı.");
       }
@@ -456,6 +485,11 @@ const PhotoEditScreen = () => {
                   ref={imageRef}
                   source={{ uri: image }}
                   style={styles.image}
+                  resizeMode="contain"
+                  onLayout={(e) => {
+                    const { width, height } = e.nativeEvent.layout;
+                    setDisplaySize({ width, height });
+                  }}
                   onLoad={onImageLoad}
                 />
                 <PanGestureHandler
@@ -624,7 +658,7 @@ const PhotoEditScreen = () => {
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
               <Image
-                source={{ uri: `${API_URL}${filteredModal.url}` }}
+                source={{ uri: filteredModal.url }}
                 style={styles.modalImage}
                 resizeMode="contain"
               />
@@ -748,7 +782,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: "100%",
-    height: "100%",
+    aspectRatio: 3 / 4,
     maxHeight: 500,
     borderRadius: 5,
     overflow: "hidden",
