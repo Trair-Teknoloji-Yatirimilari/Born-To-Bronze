@@ -19,35 +19,12 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, Circle } from "react-native-svg";
-import { PanGestureHandler } from "react-native-gesture-handler";
+import { FlatList, PanGestureHandler } from "react-native-gesture-handler";
 import { Buffer } from "buffer";
 import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
-
-const BRONZE_PRODUCTS = [
-  {
-    id: 1,
-    name: "Altın Bronz",
-    color: "#CD7F32",
-    intensity: 0.7,
-    image: "https://example.com/gold-bronze.png",
-  },
-  {
-    id: 2,
-    name: "Koyu Bronz",
-    color: "#8B4513",
-    intensity: 0.9,
-    image: "https://example.com/dark-bronze.png",
-  },
-  {
-    id: 3,
-    name: "Açık Bronz",
-    color: "#D2B48C",
-    intensity: 0.5,
-    image: "https://example.com/light-bronze.png",
-  },
-];
+import { PRODUCTS } from "../constants/products";
 
 // Fırça boyutu için sabitleri güncelliyoruz
 const MIN_BRUSH_RADIUS = 5;
@@ -429,6 +406,19 @@ const PhotoEditScreen = () => {
     return { minX, minY, maxX, maxY };
   }
 
+  const ProductItem = ({ product }) => {
+    const handleSelect = () => {
+      setSelectedProduct(product);
+    };
+    return (
+      <TouchableOpacity style={[styles.productItem, selectedProduct?.id === product.id && styles.selectedProductItem]} onPress={handleSelect}>
+        <Image source={product.pngImage} style={styles.productImage} />
+        <Text style={styles.productName}>{product.name}</Text>
+        <Text style={styles.productPrice}>{product.price} TL</Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <ImageBackground
       source={require("../assets/welcome-bg.png")}
@@ -599,6 +589,17 @@ const PhotoEditScreen = () => {
               </TouchableOpacity>
             </View>
 
+            <View style={styles.productsContainer}>
+              {/* Slider gibi yan yana sirali urunler gösterilecek */}
+              <FlatList
+                data={PRODUCTS}
+                renderItem={({ item }) => <ProductItem product={item} />}
+                keyExtractor={(item) => item.id.toString()}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              />
+            </View>
+
             <TouchableOpacity
               style={[styles.button, styles.bronzeButton]}
               onPress={applyBronzeEffect}
@@ -731,7 +732,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 10,
     alignItems: "center",
-    marginTop: 50,
+    marginVertical: 50,
   },
   title: {
     fontSize: 24,
@@ -748,6 +749,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: "100%",
     height: "100%",
+    maxHeight: 500,
     borderRadius: 5,
     overflow: "hidden",
     marginBottom: 20,
@@ -940,6 +942,45 @@ const styles = StyleSheet.create({
   },
   eraseActive: {
     backgroundColor: "#4CAF50",
+  },
+  productsContainer: {
+    flexDirection: "row",
+    width: "85%",
+    paddingTop: 10,
+    paddingHorizontal: 10,
+  },
+  productItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    width: 150,
+    height: 175,
+    marginRight: 10,
+    gap: 2,
+    borderWidth: 1,
+    borderColor: COLORS.text,
+    borderRadius: 10,
+    padding: 5,
+  },
+  selectedProductItem: {
+    backgroundColor: COLORS.active,
+    borderRadius: 10,
+  },
+  productImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 10,
+    objectFit: "contain",
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: COLORS.text,
+    textAlign: "center",
+  },
+  productPrice: {
+    fontSize: 14,
+    color: COLORS.text,
   },
 });
 
