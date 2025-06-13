@@ -19,7 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, Circle } from "react-native-svg";
-import { FlatList, PanGestureHandler } from "react-native-gesture-handler";
+import { FlatList, PanGestureHandler, State as GestureState } from "react-native-gesture-handler";
 import { Buffer } from "buffer";
 import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { Ionicons } from "@expo/vector-icons";
@@ -58,11 +58,11 @@ function interpolatePoints(x1, y1, x2, y2) {
 }
 
 // Noktaları optimize eden fonksiyon
-function optimizePoints(points) {
+function optimizePoints(points, brush) {
   if (points.length <= 2) return points;
 
   const optimized = [points[0]];
-  const minDistance = BRUSH_RADIUS / 2;
+  const minDistance = (brush || BRUSH_RADIUS) / 4;
 
   for (let i = 1; i < points.length; i++) {
     const lastPoint = optimized[optimized.length - 1];
@@ -93,7 +93,7 @@ function mergePaths(paths) {
     }
   });
 
-  return optimizePoints(mergedPoints);
+  return optimizePoints(mergedPoints, null);
 }
 
 // Koordinatları normalize eden fonksiyon
@@ -174,8 +174,8 @@ const API_URL = __DEV__
 const PhotoEditScreen = () => {
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [paths, setPaths] = useState([]);
-  const [currentPath, setCurrentPath] = useState([]);
+  const [paths, setPaths] = useState([]); // { points: Point[], brush: number }
+  const [currentPath, setCurrentPath] = useState({ points: [], brush: DEFAULT_BRUSH_RADIUS });
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [eraseMode, setEraseMode] = useState(false);
@@ -198,12 +198,15 @@ const PhotoEditScreen = () => {
     url: null,
   });
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
+  const paintedRef = useRef(new Set()); // Boyanmış grid anahtarları
 
   // Fırça boyutunu güncelleme fonksiyonu
   const updateBrushSize = (size) => {
     BRUSH_RADIUS = size;
     BRUSH_RADIUS_SQ = size * size;
     setBrushSize(size);
+    // Yeni pathlerin fırça boyutu değişsin; mevcutlar etkilenmez
+    setCurrentPath((prev)=>({ ...prev, brush: size }));
   };
 
   // Fırça kontrollerini göster/gizle
@@ -236,7 +239,7 @@ const PhotoEditScreen = () => {
       setImage(asset.uri);
       setImageDimensions({ width: asset.width, height: asset.height });
       setPaths([]);
-      setCurrentPath([]);
+      setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
       setSelectedProduct(null);
     }
   };
@@ -258,7 +261,7 @@ const PhotoEditScreen = () => {
       setImage(asset.uri);
       setImageDimensions({ width: asset.width, height: asset.height });
       setPaths([]);
-      setCurrentPath([]);
+      setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
       setSelectedProduct(null);
     }
   };
@@ -266,14 +269,20 @@ const PhotoEditScreen = () => {
   const onGestureEvent = (event) => {
     const { x, y } = event.nativeEvent;
     setBrushPos({ x, y });
-    if (x < 0 || x > Dimensions.get("window").width - 40 || y < 0 || y > 400) {
-      return;
-    }
+    if (x < 0 || y < 0) return;
+
+    // Nokta anahtarı (ekranda piksel)
+    const key = `${Math.round(x)},${Math.round(y)}`;
+    if (paintedRef.current.has(key)) return; // Zaten boyanmış
+
     if (lastPoint) {
-      const newPoints = interpolatePoints(lastPoint.x, lastPoint.y, x, y);
-      setCurrentPath((prev) => optimizePoints([...prev, ...newPoints]));
+      const newPoints = interpolatePoints(lastPoint.x, lastPoint.y, x, y).filter(pt=>{
+        const k=`${Math.round(pt.x)},${Math.round(pt.y)}`;
+        return !paintedRef.current.has(k);
+      });
+      setCurrentPath((prev) => ({ ...prev, points: optimizePoints([...prev.points, ...newPoints], brushSize) }));
     } else {
-      setCurrentPath([{ x, y }]);
+      setCurrentPath({ points: [{ x, y }], brush: brushSize });
     }
     setLastPoint({ x, y });
   };
@@ -283,7 +292,7 @@ const PhotoEditScreen = () => {
     setLastPoint(null);
     if (event && event.nativeEvent) {
       const { x, y } = event.nativeEvent;
-      setCurrentPath([{ x, y }]);
+      setCurrentPath({ points: [{ x, y }], brush: brushSize });
       setBrushPos({ x, y });
     }
   };
@@ -291,10 +300,13 @@ const PhotoEditScreen = () => {
   const onGestureEnd = () => {
     setIsDrawing(false);
     setBrushPos(null);
-    if (currentPath.length > 0) {
-      // Mevcut path'i paths'e ayrı olarak ekle
+    if (currentPath.points && currentPath.points.length > 0) {
       setPaths((prev) => [...prev, currentPath]);
-      setCurrentPath([]);
+      // Boyanmış set'e ekle
+      currentPath.points.forEach(pt=>{
+        paintedRef.current.add(`${Math.round(pt.x)},${Math.round(pt.y)}`);
+      });
+      setCurrentPath({ points: [], brush: brushSize });
     }
     setLastPoint(null);
   };
@@ -304,14 +316,15 @@ const PhotoEditScreen = () => {
     if (!eraseMode) return;
     // Dairesel alanı sil
     const newPaths = paths
-      .map((path) =>
-        path.filter((point) => {
+      .map((p) => {
+        const filtered = p.points.filter((point) => {
           const dx = point.x - x;
           const dy = point.y - y;
           return dx * dx + dy * dy >= brushSize * brushSize;
-        })
-      )
-      .filter((path) => path.length > 0);
+        });
+        return { ...p, points: filtered };
+      })
+      .filter((p) => p.points.length > 0);
     setPaths(newPaths);
   };
 
@@ -350,9 +363,10 @@ const PhotoEditScreen = () => {
       const containerWidth = displaySize.width || origWidth;
       const containerHeight = displaySize.height || origHeight;
 
+      const allPoints = paths.flatMap((p)=>p.points);
       // Mask noktalarını optimize et
       const mask = optimizeMaskPoints(
-        paths.flat(),
+        allPoints,
         origWidth,
         origHeight,
         containerWidth,
@@ -399,7 +413,7 @@ const PhotoEditScreen = () => {
           text: "Temizle",
           onPress: () => {
             setPaths([]);
-            setCurrentPath([]);
+            setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
           },
         },
       ]
@@ -497,39 +511,40 @@ const PhotoEditScreen = () => {
                     eraseMode ? onEraseGestureEvent : onGestureEvent
                   }
                   onHandlerStateChange={({ nativeEvent }) => {
-                    if (nativeEvent.state === 4) {
-                      onGestureEnd();
-                    } else if (nativeEvent.state === 2) {
+                    const s = nativeEvent.state;
+                    if (s === GestureState.BEGAN) {
                       onGestureStart(nativeEvent);
+                    } else if (s === GestureState.END || s === GestureState.CANCELLED || s === GestureState.FAILED) {
+                      onGestureEnd();
                     }
                   }}
                 >
                   <Animated.View style={StyleSheet.absoluteFill}>
                     <Svg style={StyleSheet.absoluteFill}>
-                      {paths.map((path, index) => (
+                      {paths.map((p, index) => (
                         <Path
                           key={index}
                           d={
-                            path.reduce((acc, point, i) => {
+                            p.points.reduce((acc, point, i) => {
                               if (i === 0) return `M ${point.x} ${point.y}`;
                               return `${acc} L ${point.x} ${point.y}`;
-                            }, "") + (path.length > 2 ? " Z" : "")
+                            }, "")
                           }
                           stroke={BRUSH_COLOR}
-                          strokeWidth={brushSize * 2}
-                          fill="rgba(0,255,0,0.10)"
+                          strokeWidth={p.brush * 2}
+                          fill="none"
                           strokeLinejoin="round"
                           strokeLinecap="round"
                         />
                       ))}
-                      {currentPath.length > 1 && (
+                      {currentPath.points && currentPath.points.length > 1 && (
                         <Path
-                          d={currentPath.reduce((acc, point, i) => {
+                          d={currentPath.points.reduce((acc, point, i) => {
                             if (i === 0) return `M ${point.x} ${point.y}`;
                             return `${acc} L ${point.x} ${point.y}`;
                           }, "")}
                           stroke={BRUSH_COLOR}
-                          strokeWidth={brushSize * 2}
+                          strokeWidth={currentPath.brush * 2}
                           fill="none"
                           strokeLinejoin="round"
                           strokeLinecap="round"
@@ -895,6 +910,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    top:'50%',
     backgroundColor: "rgba(0,0,0,0.9)",
     borderTopLeftRadius: SIZES.radius * 2,
     borderTopRightRadius: SIZES.radius * 2,
