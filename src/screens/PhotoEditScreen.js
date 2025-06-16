@@ -130,8 +130,12 @@ function optimizeMaskPoints(
   containerHeight,
   brushSize
 ) {
-  // Görüntünün ekranda görünür boyutlarını hesapla (contain)
-  const scale = Math.min(
+  // Image is displayed with resizeMode="cover", which scales the image so that it
+  // completely fills the container and crops the overflow.  Therefore we should
+  // use the *larger* scale factor (Math.max) instead of the smaller one that would
+  // correspond to "contain".  This ensures that the pixel coordinates we send to
+  // the backend map exactly to the visible portion of the image the user paints on.
+  const scale = Math.max(
     containerWidth / origWidth,
     containerHeight / origHeight
   );
