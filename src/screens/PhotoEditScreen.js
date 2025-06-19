@@ -176,12 +176,12 @@ function optimizeMaskPoints(
   });
   return mask;
 }
-
+//31 xd
 const API_URL = __DEV__
   ? Platform.select({
-      ios: "http://localhost:5000",
-      android: "http://10.0.2.2:5000",
-    })
+    ios: "http://localhost:5000",
+    android: "http://10.0.2.2:5000",
+  })
   : "https://your-production-api.com";
 
 const PhotoEditScreen = () => {
@@ -517,21 +517,19 @@ const PhotoEditScreen = () => {
             <View style={styles.step0Container}>
               <Text style={styles.title}>Fotoğraf Seç</Text>
               <Text style={styles.desc}>
-                Lorem ipsum dolor sit amet consectetur adipisicing elit. Ratione
-                necessitatibus nostrum nihil cumque dolorem soluta unde sit
-                beatae nisi vero, ullam consequuntur incidunt alias adipisci?
+                Bronzlaştırıcı etkileri denemek için hemen bir fotoğraf seçmen yeterli!
               </Text>
               <View style={styles.actions}>
-                <Text style={styles.actionText}>Dilerseniz hemen bir</Text>
+                <Text style={styles.actionText}>Yüz veya vücut bölgelerine bronzlaştırıcı krem uygulamak için hemen </Text>
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={takePhoto}
                 >
                   <Ionicons name="camera" size={24} color={COLORS.text} />
-                  <Text>Fotoğraf çekin</Text>
+                  <Text>Kamerayı açın</Text>
                 </TouchableOpacity>
                 <Text style={styles.actionText}>
-                  veya hızlıca galerinizden dilediğiniz bir
+                  veya hızlıca dilediğiniz bir fotoğrafı
                 </Text>
                 <TouchableOpacity
                   style={styles.actionButton}
@@ -567,9 +565,9 @@ const PhotoEditScreen = () => {
                   (step === 1 &&
                     paths.length > 0 &&
                     styles.floatingTopNavActive) ||
-                    (step === 2 &&
-                      selectedProduct &&
-                      styles.floatingTopNavActive),
+                  (step === 2 &&
+                    selectedProduct &&
+                    styles.floatingTopNavActive),
                 ]}
                 onPress={() => {
                   if (step === 1) {
@@ -619,7 +617,7 @@ const PhotoEditScreen = () => {
                     ? eraseMode
                       ? onEraseGestureEvent
                       : onGestureEvent
-                    : () => {}
+                    : () => { }
                 }
                 onHandlerStateChange={({ nativeEvent }) => {
                   const s = nativeEvent.state;
@@ -799,42 +797,53 @@ const PhotoEditScreen = () => {
           </>
         )}
         {step === 3 && (
-          <View style={styles.step1Container}>
-            <TouchableOpacity
-              style={styles.floatingTopNavBack}
-              onPress={() => {
-                setStep(2);
-              }}
-            >
-              <Text style={styles.floatingTopNavText}>Geri Dön</Text>
-            </TouchableOpacity>
-            <Image
-              source={{ uri: resultImage }}
-              style={styles.image}
-              resizeMode="cover"
-              aspectRatio={[9, 16]}
-            />
-            <TouchableOpacity
-              style={{
-                position: "absolute",
-                left: 10,
-                top: 100,
-                backgroundColor: COLORS.button,
-                padding: 10,
-                borderRadius: 10,
-                width: 150,
-                height: 50,
-                justifyContent: "center",
-                alignItems: "center",
-                zIndex: 1000,
-              }}
-              onPress={() => {
-                console.log("save", resultImage);
-              }}
-            >
-              <Text style={styles.saveButtonText}>Kaydet</Text>
-            </TouchableOpacity>
-          </View>
+          <ScrollView style={{
+            flex: 1,
+          }}>
+            <View style={styles.step1Container}>
+              <TouchableOpacity
+                style={styles.floatingTopNavBack}
+                onPress={() => {
+                  setStep(2);
+                }}
+              >
+                <Text style={styles.floatingTopNavText}>Geri Dön</Text>
+              </TouchableOpacity>
+              <Image
+                source={{ uri: resultImage }}
+                style={styles.resultImage}
+                resizeMode="cover"
+                aspectRatio={[9, 16]}
+              />
+              <View style={styles.resultButtonsContainer}>
+                <TouchableOpacity style={styles.resultButtons}>
+                  <Text>Paylaş</Text>
+                </TouchableOpacity>
+                <Text style={{
+                  textAlign: "center",
+                  fontSize: 12,
+                  color: COLORS.text,
+                }}>
+                  {`Fotoğrafınızı paylaşın ve sizin için özel oluşturulan indirim kodunu kaçırmayın!`}
+                </Text>
+                <TouchableOpacity style={styles.resultButtons}>
+                  <Text>Hemen Satın Al</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={{
+                textAlign: "center",
+                fontSize: 12,
+                color: COLORS.text,
+              }}>Ayrıca diğer kullanıcıların deneyimlerini de görebilirsiniz</Text>
+
+              <View style={styles.resultSuggestions}>
+                <View style={styles.resultSuggestionItem}></View>
+                <View style={styles.resultSuggestionItem}></View>
+                <View style={styles.resultSuggestionItem}></View>
+                <View style={styles.resultSuggestionItem}></View>
+              </View>
+            </View>
+          </ScrollView>
         )}
       </LinearGradient>
     </ImageBackground>
@@ -855,13 +864,13 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   title: {
-    fontSize: 24,
+    fontSize: 36,
     fontWeight: "bold",
     color: COLORS.text,
     marginBottom: 20,
   },
   desc: {
-    fontSize: 16,
+    fontSize: 20,
     color: COLORS.text,
     marginBottom: 20,
     textAlign: "center",
@@ -1033,6 +1042,48 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
+  resultImage: {
+    width: "100%",
+    height:500,
+    borderRadius: 10,
+    objectFit: "contain",
+  },
+  resultButtonsContainer: {
+    gap: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    width: "100%",
+    padding: 10
+  },
+  resultButtons: {
+    backgroundColor: COLORS.button,
+    padding: 10,
+    borderRadius: 10,
+    width: "100",
+    width: "100%",
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  resultSuggestions: {
+    display: "flex",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  resultSuggestionItem: {
+    width: 150,
+    height: 150,
+    backgroundColor: COLORS.button,
+    borderRadius: 10,
+  }
 });
+
 
 export default PhotoEditScreen;
