@@ -1,256 +1,350 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  View,
   StyleSheet,
-  TouchableOpacity,
   Text,
-  Alert,
-  FlatList,
-  Image,
-  ActivityIndicator,
+  Button,
+  View,
+  useWindowDimensions,
 } from "react-native";
 import {
-  Camera,
-  useCameraDevices,
-  useFrameProcessor,
+  DrawableFrame,
+  Frame,
+  Camera as VisionCamera,
+  useCameraDevice,
+  useCameraPermission,
 } from "react-native-vision-camera";
-import { runOnJS } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
-// @ts-ignore – native plugin; make sure to install it via yarn add react-native-vision-camera-face-detector
-import { detectFaces } from 'react-native-vision-camera-face-detector';
-import { PRODUCTS } from "../constants/products";
-import { COLORS } from "../constants/theme";
+import { useIsFocused } from "@react-navigation/core";
+import { useAppState } from "@react-native-community/hooks";
+import { Camera, Face } from "react-native-vision-camera-face-detector";
+import { ClipOp, Skia, TileMode } from "@shopify/react-native-skia";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 const RealTimeScreen = () => {
-  // -----------------------
-  // Permissions & devices
-  // -----------------------
-  const devices = useCameraDevices();
-  const [isFrontCamera, setIsFrontCamera] = useState(true);
-  const device = isFrontCamera ? devices.front : devices.back;
-  const cameraRef = useRef(null);
+  const { width, height } = useWindowDimensions();
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const [cameraMounted, setCameraMounted] = useState(false);
+  const [cameraPaused, setCameraPaused] = useState(false);
+  const [autoMode, setAutoMode] = useState(true);
+  const [cameraFacing, setCameraFacing] = useState("front");
+  const faceDetectionOptions = useRef({
+    performanceMode: "fast",
+    classificationMode: "all",
+    contourMode: "all",
+    landmarkMode: "all",
+    windowWidth: width,
+    windowHeight: height,
+  });
+  const isFocused = useIsFocused();
+  const appState = useAppState();
+  const isCameraActive = !cameraPaused && isFocused && appState === "active";
+  const cameraDevice = useCameraDevice(cameraFacing);
+  //
+  // vision camera ref
+  //
+  const camera = useRef(null);
+  //
+  // face rectangle position
+  //
+  const aFaceW = useSharedValue(0);
+  const aFaceH = useSharedValue(0);
+  const aFaceX = useSharedValue(0);
+  const aFaceY = useSharedValue(0);
+  const aRot = useSharedValue(0);
+  const boundingBoxStyle = useAnimatedStyle(() => ({
+    position: "absolute",
+    borderWidth: 4,
+    borderLeftColor: "rgb(0,255,0)",
+    borderRightColor: "rgb(0,255,0)",
+    borderBottomColor: "rgb(0,255,0)",
+    borderTopColor: "rgb(255,0,0)",
+    width: withTiming(aFaceW.value, {
+      duration: 100,
+    }),
+    height: withTiming(aFaceH.value, {
+      duration: 100,
+    }),
+    left: withTiming(aFaceX.value, {
+      duration: 100,
+    }),
+    top: withTiming(aFaceY.value, {
+      duration: 100,
+    }),
+    transform: [
+      {
+        rotate: `${aRot.value}deg`,
+      },
+    ],
+  }));
 
-  const [hasPermission, setHasPermission] = useState(false);
-  const [faces, setFaces] = useState([]); // Detected faces per frame
-  const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0]);
-  const [isCapturing, setIsCapturing] = useState(false);
-
-  // Request permission on mount
   useEffect(() => {
-    (async () => {
-      const status = await Camera.requestCameraPermission();
-      setHasPermission(status === "authorized");
-      if (status !== "authorized") {
-        Alert.alert(
-          "Kamera izni gerekli",
-          "Gerçek zamanlı önizleme için kamera iznine ihtiyacımız var."
-        );
-      }
-    })();
+    if (hasPermission) return;
+    requestPermission();
   }, []);
 
-  // -----------------------
-  // Frame Processor – Face detection
-  // -----------------------
-  const frameProcessor = useFrameProcessor((frame) => {
-    'worklet';
-    const facesDetected = detectFaces(frame);
-    runOnJS(setFaces)(facesDetected.faces ?? facesDetected); // sürüme göre
-  }, []);
+  /**
+   * Handle camera UI rotation
+   *
+   * @param {number} rotation Camera rotation
+   */
+  function handleUiRotation(rotation) {
+    aRot.value = rotation;
+  }
 
-  // -----------------------
-  // Camera actions
-  // -----------------------
-  const toggleCamera = () => setIsFrontCamera((prev) => !prev);
+  /**
+   * Hanldes camera mount error event
+   *
+   * @param {any} error Error event
+   */
+  function handleCameraMountError(error) {
+    console.error("camera mount error", error);
+  }
 
-  const takePhoto = useCallback(async () => {
-    if (cameraRef.current == null) return;
-    try {
-      setIsCapturing(true);
-      const photo = await cameraRef.current.takePhoto({});
-      setIsCapturing(false);
-      // TODO: Navigate to a preview screen or reuse PhotoEditScreen with the captured uri.
-      Alert.alert("Fotoğraf çekildi", "Dosya yolu: " + photo.path);
-    } catch (err) {
-      setIsCapturing(false);
-      console.error(err);
-      Alert.alert("Hata", "Fotoğraf çekilemedi: " + err.message);
+  /**
+   * Handle detection result
+   *
+   * @param {Face[]} faces Detection result
+   * @param {Frame} frame Current frame
+   * @returns {void}
+   */
+  function handleFacesDetected(faces, frame) {
+    // if no faces are detected we do nothing
+    if (faces.length <= 0) {
+      aFaceW.value = 0;
+      aFaceH.value = 0;
+      aFaceX.value = 0;
+      aFaceY.value = 0;
+      return;
     }
-  }, []);
 
-  // -----------------------
-  // Render helpers
-  // -----------------------
-  const renderProduct = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.productItem,
-        selectedProduct.id === item.id && styles.selectedProductItem,
-      ]}
-      onPress={() => setSelectedProduct(item)}
-    >
-      {/* PNG görüntü şişe görseli transparan arka planlı */}
-      <Image source={item.pngImage} style={styles.productImage} />
-      <Text style={styles.productName}>{item.name}</Text>
-    </TouchableOpacity>
-  );
-
-  // -----------------------
-  // Early return if no device or permission
-  // -----------------------
-  if (device == null || !hasPermission) {
-    return (
-      <View style={styles.permissionContainer}>
-        <ActivityIndicator size="large" color={COLORS.text} />
-        <Text style={styles.permissionText}>
-          Kamera hazırlanıyor, lütfen bekleyin...
-        </Text>
-      </View>
+    console.log(
+      "faces",
+      faces.length,
+      "frame",
+      frame.toString(),
+      "faces",
+      JSON.stringify(faces)
     );
+
+    const { bounds } = faces[0];
+    const { width, height, x, y } = bounds;
+    aFaceW.value = width;
+    aFaceH.value = height;
+    aFaceX.value = x;
+    aFaceY.value = y;
+
+    // only call camera methods if ref is defined
+    if (camera.current) {
+      // take photo, capture video, etc...
+    }
+  }
+
+  /**
+   * Handle skia frame actions
+   *
+   * @param {Face[]} faces Detection result
+   * @param {DrawableFrame} frame Current frame
+   * @returns {void}
+   */
+  function handleSkiaActions(faces, frame) {
+    "worklet";
+    // if no faces are detected we do nothing
+    if (faces.length <= 0) return;
+
+    console.log("SKIA - faces", faces.length, "frame", frame.toString());
+
+    const { bounds, contours, landmarks } = faces[0];
+
+    // draw a blur shape around the face points
+    const blurRadius = 25;
+    const blurFilter = Skia.ImageFilter.MakeBlur(
+      blurRadius,
+      blurRadius,
+      TileMode.Repeat,
+      null
+    );
+    const blurPaint = Skia.Paint();
+    blurPaint.setImageFilter(blurFilter);
+    const contourPath = Skia.Path.Make();
+    const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
+
+    necessaryContours.map((key) => {
+      contours?.[key]?.map((point, index) => {
+        if (index === 0) {
+          // it's a starting point
+          contourPath.moveTo(point.x, point.y);
+        } else {
+          // it's a continuation
+          contourPath.lineTo(point.x, point.y);
+        }
+      });
+      contourPath.close();
+    });
+
+    frame.save();
+    frame.clipPath(contourPath, ClipOp.Intersect, true);
+    frame.render(blurPaint);
+    frame.restore();
+
+    // draw mouth shape
+    const mouthPath = Skia.Path.Make();
+    const mouthPaint = Skia.Paint();
+    mouthPaint.setColor(Skia.Color("red"));
+    const necessaryLandmarks = ["MOUTH_BOTTOM", "MOUTH_LEFT", "MOUTH_RIGHT"];
+
+    necessaryLandmarks.map((key, index) => {
+      const point = landmarks?.[key];
+      if (!point) return;
+
+      if (index === 0) {
+        // it's a starting point
+        mouthPath.moveTo(point.x, point.y);
+      } else {
+        // it's a continuation
+        mouthPath.lineTo(point.x, point.y);
+      }
+    });
+    mouthPath.close();
+    frame.drawPath(mouthPath, mouthPaint);
+
+    // draw a rectangle around the face
+    const rectPaint = Skia.Paint();
+    rectPaint.setColor(Skia.Color("blue"));
+    rectPaint.setStyle(1);
+    rectPaint.setStrokeWidth(5);
+    frame.drawRect(bounds, rectPaint);
   }
 
   return (
-    <View style={styles.container}>
-      {/* Kamera Görünümü */}
-      <Camera
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        device={device}
-        isActive={true}
-        photo={true}
-        frameProcessor={frameProcessor}
-        frameProcessorFps={15}
-      />
+    <>
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            alignItems: "center",
+            justifyContent: "center",
+          },
+        ]}
+      >
+        {hasPermission && cameraDevice ? (
+          <>
+            {cameraMounted && (
+              <>
+                <Camera
+                  ref={camera}
+                  style={StyleSheet.absoluteFill}
+                  isActive={isCameraActive}
+                  device={cameraDevice}
+                  onError={handleCameraMountError}
+                  faceDetectionCallback={handleFacesDetected}
+                  onUIRotationChanged={handleUiRotation}
+                  skiaActions={handleSkiaActions}
+                  faceDetectionOptions={{
+                    ...faceDetectionOptions,
+                    autoMode,
+                    cameraFacing,
+                  }}
+                />
 
-      {/* Yüze uygulanan bronzlaştırıcı overlay */}
-      {faces.map((face, idx) => {
-        const {
-          bounds: { origin, size },
-        } = face;
-        const overlayColor = selectedProduct.color || "#CD7F32";
-        return (
-          <View
-            key={idx}
-            style={[
-              styles.faceOverlay,
-              {
-                left: origin.x,
-                top: origin.y,
-                width: size.width,
-                height: size.height,
-                backgroundColor: overlayColor + "66", // ~40% opacity
-              },
-            ]}
+                <Animated.View style={boundingBoxStyle} />
+
+                {cameraPaused && (
+                  <Text
+                    style={{
+                      width: "100%",
+                      backgroundColor: "rgb(0,0,255)",
+                      textAlign: "center",
+                      color: "white",
+                    }}
+                  >
+                    Camera is PAUSED
+                  </Text>
+                )}
+              </>
+            )}
+
+            {!cameraMounted && (
+              <Text
+                style={{
+                  width: "100%",
+                  backgroundColor: "rgb(255,255,0)",
+                  textAlign: "center",
+                }}
+              >
+                Camera is NOT mounted
+              </Text>
+            )}
+          </>
+        ) : (
+          <Text
+            style={{
+              width: "100%",
+              backgroundColor: "rgb(255,0,0)",
+              textAlign: "center",
+              color: "white",
+            }}
+          >
+            No camera device or permission
+          </Text>
+        )}
+      </View>
+
+      <View
+        style={{
+          position: "absolute",
+          bottom: 20,
+          left: 0,
+          right: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <View
+          style={{
+            width: "100%",
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-around",
+          }}
+        >
+          <Button
+            onPress={() =>
+              setCameraFacing((current) =>
+                current === "front" ? "back" : "front"
+              )
+            }
+            title={"Toggle Cam"}
           />
-        );
-      })}
 
-      {/* Kamera değiştir ve fotoğraf çek butonları */}
-      <View style={styles.topControls}>
-        <TouchableOpacity style={styles.iconButton} onPress={toggleCamera}>
-          <Ionicons name="camera-reverse" size={24} color={COLORS.text} />
-        </TouchableOpacity>
+          <Button
+            onPress={() => setAutoMode((current) => !current)}
+            title={`${autoMode ? "Disable" : "Enable"} AutoMode`}
+          />
+        </View>
+        <View
+          style={{
+            width: "100%",
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-around",
+          }}
+        >
+          <Button
+            onPress={() => setCameraPaused((current) => !current)}
+            title={`${cameraPaused ? "Resume" : "Pause"} Cam`}
+          />
+
+          <Button
+            onPress={() => setCameraMounted((current) => !current)}
+            title={`${cameraMounted ? "Unmount" : "Mount"} Cam`}
+          />
+        </View>
       </View>
-
-      <View style={styles.bottomControls}>
-        {/* Ürün seçimi */}
-        <FlatList
-          data={PRODUCTS}
-          renderItem={renderProduct}
-          keyExtractor={(item) => item.id.toString()}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 10, gap: 10 }}
-        />
-
-        {/* Fotoğraf çekme butonu */}
-        <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
-          {isCapturing ? (
-            <ActivityIndicator color={COLORS.text} />
-          ) : (
-            <Ionicons name="camera" size={32} color={COLORS.text} />
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
+    </>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  permissionContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: COLORS.background,
-  },
-  permissionText: {
-    marginTop: 10,
-    color: COLORS.text,
-    fontSize: 16,
-  },
-  faceOverlay: {
-    position: "absolute",
-    borderRadius: 100,
-  },
-  topControls: {
-    position: "absolute",
-    top: 40,
-    right: 20,
-    flexDirection: "row",
-    gap: 10,
-  },
-  iconButton: {
-    backgroundColor: COLORS.button,
-    padding: 8,
-    borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  bottomControls: {
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    gap: 15,
-  },
-  captureButton: {
-    marginTop: 10,
-    backgroundColor: COLORS.button,
-    padding: 15,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  productItem: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 120,
-    height: 150,
-    borderWidth: 1,
-    borderColor: COLORS.text,
-    borderRadius: 10,
-    padding: 5,
-    backgroundColor: COLORS.background,
-  },
-  selectedProductItem: {
-    backgroundColor: COLORS.active,
-  },
-  productImage: {
-    width: 80,
-    height: 80,
-    resizeMode: "contain",
-  },
-  productName: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: "bold",
-    color: COLORS.text,
-  },
-});
-
-export default RealTimeScreen; 
+export default RealTimeScreen;
