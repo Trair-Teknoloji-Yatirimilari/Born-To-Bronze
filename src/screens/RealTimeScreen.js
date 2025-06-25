@@ -55,18 +55,22 @@ const RealTimeScreen = () => {
   const aFaceY = useSharedValue(0);
   const aRot = useSharedValue(0);
   const boundingBoxStyle = useAnimatedStyle(() => {
-    const size = Math.max(aFaceW.value, aFaceH.value);
+    // Yüz daha çok oval şeklinde olduğu için genişlik ve yüksekliği ayrı ayrı kullan
+    const faceWidth = aFaceW.value;
+    const faceHeight = aFaceH.value;
+    
     return {
       position: "absolute",
-      borderWidth: 4,
-      borderColor: "rgb(0,255,0)",
-      borderRadius: size / 2,
-      width: withTiming(size, { duration: 100 }),
-      height: withTiming(size, { duration: 100 }),
-      left: withTiming(aFaceX.value - (size - aFaceW.value) / 2, {
+      borderWidth: 3,
+      borderColor: "rgba(184, 134, 11, 0.8)", // Bronz çerçeve rengi
+      backgroundColor: "rgba(210, 180, 140, 0.3)", // Yarı şeffaf bronz iç alan
+      borderRadius: Math.min(faceWidth, faceHeight) / 2, // Daha doğal oval şekil
+      width: withTiming(faceWidth * 1.1, { duration: 100 }), // Biraz daha geniş
+      height: withTiming(faceHeight * 1.2, { duration: 100 }), // Biraz daha uzun
+      left: withTiming(aFaceX.value - (faceWidth * 0.05), {
         duration: 100,
       }),
-      top: withTiming(aFaceY.value - (size - aFaceH.value) / 2, {
+      top: withTiming(aFaceY.value - (faceHeight * 0.1), {
         duration: 100,
       }),
       transform: [
@@ -133,8 +137,15 @@ const RealTimeScreen = () => {
       JSON.stringify(faces)
     );
 
-    const { bounds } = faces[0];
+    const { bounds, contours, landmarks } = faces[0];
     const { width, height, x, y } = bounds;
+
+    console.log("CONTOURS mevcut mu?", contours ? "EVET" : "HAYIR");
+    console.log("LANDMARKS mevcut mu?", landmarks ? "EVET" : "HAYIR");
+    
+    if (contours) {
+      console.log("Mevcut contour'lar:", Object.keys(contours));
+    }
 
     // Yüz tespit kütüphanesinden gelen değerler 0-1 aralığında (yüzde) ise
     // bunları ekrandaki piksel değerlerine çevirelim.
@@ -163,71 +174,69 @@ const RealTimeScreen = () => {
    */
   function handleSkiaActions(faces, frame) {
     "worklet";
+    
+    console.log("SKIA ÇALIŞIYOR - faces sayısı:", faces.length);
+    
+    // Skia'nın çalıştığını test etmek için basit bir daire çiz
+    const testPaint = Skia.Paint();
+    testPaint.setColor(Skia.Color("red"));
+    frame.drawCircle(100, 100, 50, testPaint);
+    
     // if no faces are detected we do nothing
-    if (faces.length <= 0) return;
+    if (faces.length <= 0) {
+      console.log("YÜZ BULUNAMADI");
+      return;
+    }
 
-    console.log("SKIA - faces", faces.length, "frame", frame.toString());
+    console.log("YÜZ BULUNDU - faces", faces.length, "frame", frame.toString());
 
     const { bounds, contours, landmarks } = faces[0];
+    
+    console.log("BOUNDS:", JSON.stringify(bounds));
+    console.log("CONTOURS:", contours ? Object.keys(contours) : "contours yok");
+    console.log("FACE contour:", contours?.FACE ? `${contours.FACE.length} nokta` : "FACE contour yok");
 
-    // draw a blur shape around the face points
-    const blurRadius = 25;
-    const blurFilter = Skia.ImageFilter.MakeBlur(
-      blurRadius,
-      blurRadius,
-      TileMode.Repeat,
-      null
-    );
-    const blurPaint = Skia.Paint();
-    blurPaint.setImageFilter(blurFilter);
+    // Yüz konturlarını kullanarak bronzlaştırma efekti uygula
+    const bronzePaint = Skia.Paint();
+    bronzePaint.setColor(Skia.Color("rgba(210, 180, 140, 0.4)")); // Bronz rengi, yarı şeffaf
+    bronzePaint.setStyle(0); // Fill style
+    
     const contourPath = Skia.Path.Make();
-    const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
+    const faceContours = ["FACE"];
 
-    necessaryContours.map((key) => {
-      contours?.[key]?.map((point, index) => {
+    faceContours.map((key) => {
+      const contourPoints = contours?.[key];
+      if (!contourPoints || contourPoints.length === 0) {
+        console.log(`${key} contour bulunamadı`);
+        return;
+      }
+
+      console.log(`${key} contour bulundu - ${contourPoints.length} nokta`);
+
+      contourPoints.map((point, index) => {
         if (index === 0) {
-          // it's a starting point
+          // İlk nokta - başlangıç noktası
           contourPath.moveTo(point.x, point.y);
         } else {
-          // it's a continuation
+          // Devam noktaları
           contourPath.lineTo(point.x, point.y);
         }
       });
       contourPath.close();
     });
 
-    frame.save();
-    frame.clipPath(contourPath, ClipOp.Intersect, true);
-    frame.render(blurPaint);
-    frame.restore();
+    // Yüz şeklini boyayın
+    console.log("YÜZ ŞEKLİ BOYANIYOR");
+    frame.drawPath(contourPath, bronzePaint);
 
-    // draw mouth shape
-    const mouthPath = Skia.Path.Make();
-    const mouthPaint = Skia.Paint();
-    mouthPaint.setColor(Skia.Color("red"));
-    const necessaryLandmarks = ["MOUTH_BOTTOM", "MOUTH_LEFT", "MOUTH_RIGHT"];
-
-    necessaryLandmarks.map((key, index) => {
-      const point = landmarks?.[key];
-      if (!point) return;
-
-      if (index === 0) {
-        // it's a starting point
-        mouthPath.moveTo(point.x, point.y);
-      } else {
-        // it's a continuation
-        mouthPath.lineTo(point.x, point.y);
-      }
-    });
-    mouthPath.close();
-    frame.drawPath(mouthPath, mouthPaint);
-
-    // draw a rectangle around the face
-    const rectPaint = Skia.Paint();
-    rectPaint.setColor(Skia.Color("blue"));
-    rectPaint.setStyle(1);
-    rectPaint.setStrokeWidth(5);
-    frame.drawRect(bounds, rectPaint);
+    // İsteğe bağlı: Yüz sınırlarını belirginleştirmek için çerçeve çizin
+    const borderPaint = Skia.Paint();
+    borderPaint.setColor(Skia.Color("rgba(184, 134, 11, 0.8)")); // Daha koyu bronz
+    borderPaint.setStyle(1); // Stroke style
+    borderPaint.setStrokeWidth(2);
+    frame.drawPath(contourPath, borderPaint);
+    
+    console.log("SKIA İŞLEMLERİ TAMAMLANDI");
   }
 
   return (
@@ -253,7 +262,6 @@ const RealTimeScreen = () => {
                   onError={handleCameraMountError}
                   faceDetectionCallback={handleFacesDetected}
                   onUIRotationChanged={handleUiRotation}
-                  skiaActions={handleSkiaActions}
                   faceDetectionOptions={{
                     ...faceDetectionOptions,
                     autoMode,
@@ -261,6 +269,7 @@ const RealTimeScreen = () => {
                   }}
                 />
 
+                {/* Yüz takibi için yeşil overlay geri getirildi */}
                 <Animated.View style={boundingBoxStyle} />
 
                 {cameraPaused && (
