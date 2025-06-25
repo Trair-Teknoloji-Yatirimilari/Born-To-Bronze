@@ -24,7 +24,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 const RealTimeScreen = () => {
-  const { width, height } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraMounted, setCameraMounted] = useState(false);
   const [cameraPaused, setCameraPaused] = useState(false);
@@ -35,8 +35,8 @@ const RealTimeScreen = () => {
     classificationMode: "all",
     contourMode: "all",
     landmarkMode: "all",
-    windowWidth: width,
-    windowHeight: height,
+    windowWidth: screenW,
+    windowHeight: screenH,
   });
   const isFocused = useIsFocused();
   const appState = useAppState();
@@ -54,36 +54,40 @@ const RealTimeScreen = () => {
   const aFaceX = useSharedValue(0);
   const aFaceY = useSharedValue(0);
   const aRot = useSharedValue(0);
-  const boundingBoxStyle = useAnimatedStyle(() => ({
-    position: "absolute",
-    borderWidth: 4,
-    borderLeftColor: "rgb(0,255,0)",
-    borderRightColor: "rgb(0,255,0)",
-    borderBottomColor: "rgb(0,255,0)",
-    borderTopColor: "rgb(255,0,0)",
-    width: withTiming(aFaceW.value, {
-      duration: 100,
-    }),
-    height: withTiming(aFaceH.value, {
-      duration: 100,
-    }),
-    left: withTiming(aFaceX.value, {
-      duration: 100,
-    }),
-    top: withTiming(aFaceY.value, {
-      duration: 100,
-    }),
-    transform: [
-      {
-        rotate: `${aRot.value}deg`,
-      },
-    ],
-  }));
+  const boundingBoxStyle = useAnimatedStyle(() => {
+    const size = Math.max(aFaceW.value, aFaceH.value);
+    return {
+      position: "absolute",
+      borderWidth: 4,
+      borderColor: "rgb(0,255,0)",
+      borderRadius: size / 2,
+      width: withTiming(size, { duration: 100 }),
+      height: withTiming(size, { duration: 100 }),
+      left: withTiming(aFaceX.value - (size - aFaceW.value) / 2, {
+        duration: 100,
+      }),
+      top: withTiming(aFaceY.value - (size - aFaceH.value) / 2, {
+        duration: 100,
+      }),
+      transform: [
+        {
+          rotate: `${aRot.value}deg`,
+        },
+      ],
+    };
+  });
 
   useEffect(() => {
     if (hasPermission) return;
     requestPermission();
   }, []);
+
+  useEffect(() => {
+    if (hasPermission && cameraDevice) {
+      // İzinler ve cihaz hazır olduğunda kamerayı otomatik monte et
+      setCameraMounted(true);
+    }
+  }, [hasPermission, cameraDevice]);
 
   /**
    * Handle camera UI rotation
@@ -131,10 +135,18 @@ const RealTimeScreen = () => {
 
     const { bounds } = faces[0];
     const { width, height, x, y } = bounds;
-    aFaceW.value = width;
-    aFaceH.value = height;
-    aFaceX.value = x;
-    aFaceY.value = y;
+
+    // Yüz tespit kütüphanesinden gelen değerler 0-1 aralığında (yüzde) ise
+    // bunları ekrandaki piksel değerlerine çevirelim.
+    const faceW = width > 1 ? width : width * screenW;
+    const faceH = height > 1 ? height : height * screenH;
+    const faceX = x > 1 ? x : x * screenW;
+    const faceY = y > 1 ? y : y * screenH;
+
+    aFaceW.value = faceW;
+    aFaceH.value = faceH;
+    aFaceX.value = faceX;
+    aFaceY.value = faceY;
 
     // only call camera methods if ref is defined
     if (camera.current) {
