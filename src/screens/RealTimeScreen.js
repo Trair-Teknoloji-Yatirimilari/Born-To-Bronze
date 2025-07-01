@@ -30,11 +30,15 @@ const RealTimeScreen = () => {
   const [cameraPaused, setCameraPaused] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
   const [cameraFacing, setCameraFacing] = useState("front");
+  const [faceContours, setFaceContours] = useState(null);
+  const [faceLandmarks, setFaceLandmarks] = useState(null);
   const faceDetectionOptions = useRef({
-    performanceMode: "fast",
+    performanceMode: "accurate",
     classificationMode: "all",
     contourMode: "all",
     landmarkMode: "all",
+    trackingEnabled: true,
+    minFaceSize: 0.1,
     windowWidth: screenW,
     windowHeight: screenH,
   });
@@ -125,6 +129,8 @@ const RealTimeScreen = () => {
       aFaceH.value = 0;
       aFaceX.value = 0;
       aFaceY.value = 0;
+      setFaceContours(null);
+      setFaceLandmarks(null);
       return;
     }
 
@@ -145,6 +151,16 @@ const RealTimeScreen = () => {
     
     if (contours) {
       console.log("Mevcut contour'lar:", Object.keys(contours));
+      setFaceContours(contours);
+    } else {
+      setFaceContours(null);
+    }
+    
+    if (landmarks) {
+      console.log("Mevcut landmark'lar:", Object.keys(landmarks));
+      setFaceLandmarks(landmarks);
+    } else {
+      setFaceLandmarks(null);
     }
 
     // Yüz tespit kütüphanesinden gelen değerler 0-1 aralığında (yüzde) ise
@@ -239,6 +255,185 @@ const RealTimeScreen = () => {
     console.log("SKIA İŞLEMLERİ TAMAMLANDI");
   }
 
+  // Gelişmiş yüz şekli overlay'leri için fonksiyon
+  const renderAdvancedFaceOverlay = () => {
+    if (!faceContours && !faceLandmarks) {
+      // Kontur verisi yoksa basit oval kullan
+      return <Animated.View style={boundingBoxStyle} />;
+    }
+
+    // Kontur verisi varsa çoklu bölge overlay'i oluştur
+    const overlays = [];
+    
+    if (faceContours) {
+      // Ana yüz bölgesi için overlay (alın ve yanaklar)
+      if (faceContours.FACE) {
+        overlays.push(
+          <ForeheadOverlay key="forehead" facePoints={faceContours.FACE} />
+        );
+      }
+      
+      // Yanak bölgeleri için ayrı overlay'ler
+      if (faceContours.LEFT_CHEEK) {
+        overlays.push(
+          <FaceRegionOverlay 
+            key="left-cheek"
+            points={faceContours.LEFT_CHEEK}
+            color="rgba(210, 180, 140, 0.4)"
+            borderColor="rgba(184, 134, 11, 0.4)"
+          />
+        );
+      }
+      
+      if (faceContours.RIGHT_CHEEK) {
+        overlays.push(
+          <FaceRegionOverlay 
+            key="right-cheek"
+            points={faceContours.RIGHT_CHEEK}
+            color="rgba(210, 180, 140, 0.4)"
+            borderColor="rgba(184, 134, 11, 0.4)"
+          />
+        );
+      }
+    }
+
+    // Landmark verisi varsa, burun köprüsü ve çene için ek overlay'ler
+    if (faceLandmarks) {
+      if (faceLandmarks.NOSE_TIP) {
+        overlays.push(
+          <NoseBridgeOverlay key="nose" landmarks={faceLandmarks} />
+        );
+      }
+    }
+
+    return overlays.length > 0 ? overlays : <Animated.View style={boundingBoxStyle} />;
+  };
+
+  // Alın bölgesi için özel overlay (gözleri dışarıda bırakır)
+  const ForeheadOverlay = ({ facePoints }) => {
+    if (!facePoints || facePoints.length === 0) return null;
+    
+    const getBoundingBox = (points) => {
+      let minX = points[0].x * screenW;
+      let maxX = points[0].x * screenW;
+      let minY = points[0].y * screenH;
+      let maxY = points[0].y * screenH;
+      
+      points.forEach(point => {
+        const x = point.x * screenW;
+        const y = point.y * screenH;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      });
+      
+      return { minX, maxX, minY, maxY };
+    };
+
+    const bounds = getBoundingBox(facePoints);
+    const faceHeight = bounds.maxY - bounds.minY;
+    const faceWidth = bounds.maxX - bounds.minX;
+    
+    // Alın bölgesi (yüzün üst %30'u)
+    const foreheadHeight = faceHeight * 0.3;
+    
+    return (
+      <View 
+        style={{
+          position: 'absolute',
+          left: bounds.minX + faceWidth * 0.1,
+          top: bounds.minY,
+          width: faceWidth * 0.8,
+          height: foreheadHeight,
+          backgroundColor: "rgba(210, 180, 140, 0.35)",
+          borderColor: "rgba(184, 134, 11, 0.4)",
+          borderWidth: 1,
+          borderTopLeftRadius: faceWidth * 0.3,
+          borderTopRightRadius: faceWidth * 0.3,
+        }}
+        pointerEvents="none"
+      />
+    );
+  };
+
+  // Burun köprüsü overlay'i
+  const NoseBridgeOverlay = ({ landmarks }) => {
+    if (!landmarks.NOSE_TIP) return null;
+    
+    const noseTip = landmarks.NOSE_TIP;
+    const noseX = noseTip.x * screenW;
+    const noseY = noseTip.y * screenH;
+    
+    return (
+      <View 
+        style={{
+          position: 'absolute',
+          left: noseX - 15,
+          top: noseY - 25,
+          width: 30,
+          height: 40,
+          backgroundColor: "rgba(210, 180, 140, 0.3)",
+          borderColor: "rgba(184, 134, 11, 0.3)",
+          borderWidth: 1,
+          borderRadius: 15,
+        }}
+        pointerEvents="none"
+      />
+    );
+  };
+
+  // Yüz bölgesi overlay bileşeni
+  const FaceRegionOverlay = ({ points, color, borderColor }) => {
+    if (!points || points.length === 0) return null;
+
+    // Kontur noktalarından bounding box hesapla
+    const getBoundingBox = (points) => {
+      if (points.length === 0) return null;
+      
+      let minX = points[0].x * screenW;
+      let maxX = points[0].x * screenW;
+      let minY = points[0].y * screenH;
+      let maxY = points[0].y * screenH;
+      
+      points.forEach(point => {
+        const x = point.x * screenW;
+        const y = point.y * screenH;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      });
+      
+      return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY
+      };
+    };
+
+    const boundingBox = getBoundingBox(points);
+    if (!boundingBox) return null;
+
+    return (
+      <View 
+        style={{
+          position: 'absolute',
+          left: boundingBox.x,
+          top: boundingBox.y,
+          width: boundingBox.width,
+          height: boundingBox.height,
+          backgroundColor: color,
+          borderColor: borderColor,
+          borderWidth: 1,
+          borderRadius: Math.min(boundingBox.width, boundingBox.height) / 4,
+        }}
+        pointerEvents="none"
+      />
+    );
+  };
+
   return (
     <>
       <View
@@ -269,8 +464,7 @@ const RealTimeScreen = () => {
                   }}
                 />
 
-                {/* Yüz takibi için yeşil overlay geri getirildi */}
-                <Animated.View style={boundingBoxStyle} />
+                {renderAdvancedFaceOverlay()}
 
                 {cameraPaused && (
                   <Text
