@@ -176,11 +176,11 @@ function optimizeMaskPoints(
   });
   return mask;
 }
-//31 xd
+
 const API_URL = __DEV__
   ? Platform.select({
-    ios: "http://localhost:5000",
-    android: "http://10.0.2.2:5000",
+    ios: "http://localhost:3000",
+    android: "http://10.0.2.2:3000",
   })
   : "https://your-production-api.com";
 
@@ -402,7 +402,7 @@ const PhotoEditScreen = () => {
       formData.append("mask", JSON.stringify(mask));
       formData.append("selectedProduct", JSON.stringify(selectedProduct));
 
-      const response = await fetch(`${API_URL}/bronze-effect`, {
+      const response = await fetch(`${API_URL}/api/public/phone/bronze-effect`, {
         method: "POST",
         body: formData,
       });
@@ -410,7 +410,7 @@ const PhotoEditScreen = () => {
       const result = await response.json();
       if (result.success) {
         // Görüntüyü göster
-        const imageUrl = `http://localhost:5000${result.imageUrl}`; //TODO: API_URL'ye göre değiştirilecek
+        const imageUrl = `http://localhost:3000${result.imageUrl}`; //TODO: API_URL'ye göre değiştirilecek
         setResultImage(imageUrl);
         setStep(3);
       } else {
