@@ -34,7 +34,7 @@ import { PRODUCTS } from "../constants/products";
 // Fırça boyutu için sabitleri güncelliyoruz
 const MIN_BRUSH_RADIUS = 5;
 const MAX_BRUSH_RADIUS = 50;
-const DEFAULT_BRUSH_RADIUS = 20;
+const DEFAULT_BRUSH_RADIUS = 15; // 20'den 15'e düşürdüm
 
 const BRUSH_COLOR = "rgba(0,255,0,0.3)";
 let BRUSH_RADIUS = DEFAULT_BRUSH_RADIUS;
@@ -130,60 +130,147 @@ function optimizeMaskPoints(
   containerHeight,
   brushSize
 ) {
-  // Image is displayed with resizeMode="cover", which scales the image so that it
-  // completely fills the container and crops the overflow.  Therefore we should
-  // use the *larger* scale factor (Math.max) instead of the smaller one that would
-  // correspond to "contain".  This ensures that the pixel coordinates we send to
-  // the backend map exactly to the visible portion of the image the user paints on.
-  const scale = Math.max(
-    containerWidth / origWidth,
-    containerHeight / origHeight
-  );
-  const displayWidth = origWidth * scale;
-  const displayHeight = origHeight * scale;
-  const offsetX = (containerWidth - displayWidth) / 2;
-  const offsetY = (containerHeight - displayHeight) / 2;
+  console.log("🎯 Koordinat Debug:", {
+    origSize: `${origWidth}x${origHeight}`,
+    containerSize: `${containerWidth}x${containerHeight}`,
+    pointCount: points.length,
+    samplePoints: points.slice(0, 3).map(p => `(${p.x.toFixed(0)},${p.y.toFixed(0)})`)
+  });
 
-  // Ekrandaki fırça yarıçapını orijinal piksele dönüştür
-  const absBrush = Math.ceil(brushSize / scale);
+  // 9:16 aspect ratio için optimize edilmiş koordinat dönüşümü
+  const imageRatio = origWidth / origHeight;
+  const containerRatio = containerWidth / containerHeight;
+  
+  // ResizeMode "contain" için doğru scale hesaplama
+  let scale, displayWidth, displayHeight, offsetX, offsetY;
+  
+  if (imageRatio < containerRatio) {
+    // Image daha uzun - yükseklik sınırlayıcı
+    scale = containerHeight / origHeight;
+    displayHeight = containerHeight;
+    displayWidth = origWidth * scale;
+    offsetX = (containerWidth - displayWidth) / 2;
+    offsetY = 0;
+  } else {
+    // Image daha geniş - genişlik sınırlayıcı  
+    scale = containerWidth / origWidth;
+    displayWidth = containerWidth;
+    displayHeight = origHeight * scale;
+    offsetX = 0;
+    offsetY = (containerHeight - displayHeight) / 2;
+  }
+
+  console.log("📐 Transform:", {
+    scale: scale.toFixed(4),
+    displaySize: `${displayWidth.toFixed(0)}x${displayHeight.toFixed(0)}`,
+    offset: `${offsetX.toFixed(0)},${offsetY.toFixed(0)}`
+  });
+
+  // Brush parametreleri - daha küçük ve odaklı alan için
+  const absBrush = Math.min(Math.ceil(brushSize / scale), 15); // 25'ten 15'e düşürdüm
+  const gridSize = Math.max(2, Math.floor(absBrush / 8)); // 6'dan 8'e çıkardım daha az nokta için
 
   const grid = new Set();
   const mask = [];
-
-  points.forEach((pt) => {
-    // Letterbox bölgelerini çıkar
+  
+  points.forEach((pt, index) => {
+    // Screen koordinatlarını display koordinatlarına dönüştür
     const relX = pt.x - offsetX;
     const relY = pt.y - offsetY;
-    if (relX < 0 || relY < 0 || relX > displayWidth || relY > displayHeight)
+    
+    // Debug için ilk birkaç nokta
+    if (index < 3) {
+      console.log(`📍 Nokta ${index}:`, {
+        screen: `(${pt.x.toFixed(0)}, ${pt.y.toFixed(0)})`,
+        relative: `(${relX.toFixed(0)}, ${relY.toFixed(0)})`,
+        displaySize: `${displayWidth.toFixed(0)}x${displayHeight.toFixed(0)}`,
+        containerSize: `${containerWidth}x${containerHeight}`
+      });
+    }
+    
+    // Bounds kontrolü
+    if (relX < 0 || relY < 0 || relX >= displayWidth || relY >= displayHeight) {
+      if (index < 3) console.log(`❌ Nokta ${index} bounds dışında`);
       return;
+    }
 
-    const absX = Math.round(relX / scale);
-    const absY = Math.round(relY / scale);
+    // Image koordinatlarına dönüştür - Y'yi normal bırakıyorum
+    let absX = Math.round(relX / scale);
+    let absY = Math.round(relY / scale);
+    
+    // Platform-specific koordinat düzeltmeleri kaldırıldı
+    // Doğrudan koordinat dönüşümü kullanılıyor
 
-    for (let dy = -absBrush; dy <= absBrush; dy += 2) {
-      for (let dx = -absBrush; dx <= absBrush; dx += 2) {
+    if (index < 3) {
+      console.log(`🎯 FRONTEND DEBUG - Nokta ${index}:`, {
+        platform: Platform.OS,
+        screen: `(${pt.x.toFixed(0)}, ${pt.y.toFixed(0)})`,
+        relative: `(${relX.toFixed(0)}, ${relY.toFixed(0)})`,
+        image: `(${absX}, ${absY})`,
+        imagePercent: `(${(absX/origWidth*100).toFixed(1)}%, ${(absY/origHeight*100).toFixed(1)}%)`,
+        bounds: `0-${origWidth-1}, 0-${origHeight-1}`,
+        scale: scale.toFixed(4),
+        transform: {
+          screenToRelative: `(${pt.x} - ${offsetX.toFixed(0)}, ${pt.y} - ${offsetY.toFixed(0)})`,
+          relativeToImage: `(${relX.toFixed(0)} / ${scale.toFixed(4)}, ${relY.toFixed(0)} / ${scale.toFixed(4)})`
+        }
+      });
+    }
+
+    if (absX < 0 || absY < 0 || absX >= origWidth || absY >= origHeight) {
+      if (index < 3) console.log(`❌ Nokta ${index} image bounds dışında`);
+      return;
+    }
+    
+    // Brush alanı oluştur
+    for (let dy = -absBrush; dy <= absBrush; dy += gridSize) {
+      for (let dx = -absBrush; dx <= absBrush; dx += gridSize) {
         if (dx * dx + dy * dy <= absBrush * absBrush) {
-          const gx = Math.floor((absX + dx) / 2) * 2;
-          const gy = Math.floor((absY + dy) / 2) * 2;
-          const key = `${gx},${gy}`;
-          if (!grid.has(key)) {
-            grid.add(key);
-            mask.push({ x: gx, y: gy });
+          const gx = Math.floor((absX + dx) / gridSize) * gridSize;
+          const gy = Math.floor((absY + dy) / gridSize) * gridSize;
+          
+          if (gx >= 0 && gy >= 0 && gx < origWidth && gy < origHeight) {
+            const key = `${gx},${gy}`;
+            if (!grid.has(key)) {
+              grid.add(key);
+              mask.push({ x: gx, y: gy });
+            }
           }
         }
       }
     }
   });
+
+  // Final mask analizi
+  if (mask.length > 0) {
+    const bounds = {
+      minX: Math.min(...mask.map(p => p.x)),
+      maxX: Math.max(...mask.map(p => p.x)),
+      minY: Math.min(...mask.map(p => p.y)),
+      maxY: Math.max(...mask.map(p => p.y))
+    };
+    
+    console.log("🎨 Final Mask:", {
+      count: mask.length,
+      bounds: `(${bounds.minX},${bounds.minY}) → (${bounds.maxX},${bounds.maxY})`,
+      center: `(${Math.round((bounds.minX + bounds.maxX)/2)}, ${Math.round((bounds.minY + bounds.maxY)/2)})`,
+      area: `${bounds.maxX - bounds.minX}x${bounds.maxY - bounds.minY}`,
+      positionPercent: {
+        centerX: `${((bounds.minX + bounds.maxX)/2/origWidth*100).toFixed(1)}%`,
+        centerY: `${((bounds.minY + bounds.maxY)/2/origHeight*100).toFixed(1)}%`
+      }
+    });
+  }
+  
   return mask;
 }
 
-const API_URL = 'http://185.153.231.151:1003'
-// __DEV__
-//   ? Platform.select({
-//     ios: "http://localhost:3000",
-//     android: "http://10.0.2.2:3000",
-//   })
-//   : "https://your-production-api.com";
+const API_URL = __DEV__
+  ? Platform.select({
+      ios: "http://192.168.1.29:3000",
+      android: "http://10.0.2.2:3000",
+    })
+  : "https://your-production-api.com";
 
 const PhotoEditScreen = () => {
   const [step, setStep] = useState(0); // 0: Fotoğraf seçme, 1: Alan Seçme, 2: Ürün seçme, 3: Bronzlaştır
@@ -249,25 +336,103 @@ const PhotoEditScreen = () => {
 
   const takePhoto = async () => {
     console.log("Kamera açılıyor...");
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Hata", "Kamera erişim izni gerekiyor!");
-      return;
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      console.log("Kamera izin durumu:", status);
+      
+      if (status !== "granted") {
+        Alert.alert("Hata", "Kamera erişim izni gerekiyor!");
+        return;
+      }
+      
+      console.log("Kamera başlatılıyor...");
+              const result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [9, 16], // Modern mobil format: 9:16 (büyük görünüm)
+          quality: 1,
+        });
+      
+      console.log("Kamera sonucu:", result);
+      
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        console.log("Çekilen foto:", { width: asset.width, height: asset.height });
+        
+        // 9:16 ratio kontrolü ve zorunlu kırpma
+        const currentRatio = asset.width / asset.height;
+        const targetRatio = 9/16;
+        const ratioTolerance = 0.05;
+        
+        if (Math.abs(currentRatio - targetRatio) > ratioTolerance) {
+          console.log("⚠️ Aspect ratio uyumsuz, zorunlu kırpma uygulanıyor...");
+          
+          // 9:16 ratio için ideal boyutları hesapla
+          let newWidth, newHeight;
+          if (currentRatio > targetRatio) {
+            // Image çok geniş - genişliği kırp
+            newHeight = asset.height;
+            newWidth = Math.round(newHeight * targetRatio);
+          } else {
+            // Image çok dar - yüksekliği kırp
+            newWidth = asset.width;
+            newHeight = Math.round(newWidth / targetRatio);
+          }
+          
+          const originX = Math.round((asset.width - newWidth) / 2);
+          const originY = Math.round((asset.height - newHeight) / 2);
+          
+          console.log("🔄 Kırpma parametreleri:", {
+            original: `${asset.width}x${asset.height}`,
+            target: `${newWidth}x${newHeight}`,
+            crop: `${originX},${originY}`
+          });
+          
+          try {
+            const manipulatedImage = await ImageManipulator.manipulateAsync(
+              asset.uri,
+              [{
+                crop: {
+                  originX,
+                  originY,
+                  width: newWidth,
+                  height: newHeight
+                }
+              }],
+              { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            
+            console.log("✅ Kırpma tamamlandı:", {
+              width: manipulatedImage.width,
+              height: manipulatedImage.height,
+              ratio: (manipulatedImage.width / manipulatedImage.height).toFixed(3)
+            });
+            
+            setImage(manipulatedImage.uri);
+            setImageDimensions({ 
+              width: manipulatedImage.width, 
+              height: manipulatedImage.height 
+            });
+          } catch (error) {
+            console.error("❌ Kırpma hatası:", error);
+            Alert.alert("Hata", "Fotoğraf kırpılırken hata oluştu");
+            return;
+          }
+        } else {
+          setImage(asset.uri);
+          setImageDimensions({ width: asset.width, height: asset.height });
+        }
+        
+        setPaths([]);
+        setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
+        setSelectedProduct(null);
+        setStep(1);
+      } else {
+        console.log("Kamera kullanımı iptal edildi");
+      }
+    } catch (error) {
+      console.error("Kamera hatası:", error);
+      Alert.alert("Hata", "Kamera açılırken hata oluştu: " + error.message);
     }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      aspect: [9, 16],
-      quality: 1,
-    });
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      setImage(asset.uri);
-      setImageDimensions({ width: asset.width, height: asset.height });
-      setPaths([]);
-      setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
-      setSelectedProduct(null);
-    }
-    setStep(1);
   };
 
   const onGestureEvent = (event) => {
@@ -359,6 +524,8 @@ const PhotoEditScreen = () => {
   // Image yüklendiğinde boyutlarını al
   const onImageLoad = (event) => {
     const { width, height } = event.nativeEvent.source;
+    const ratio = width / height;
+    console.log(`📸 Image yüklendi: ${width}x${height}, ratio: ${ratio.toFixed(2)} (beklenen: 0.56)`);
     setImageDimensions({ width, height });
   };
 
@@ -375,38 +542,68 @@ const PhotoEditScreen = () => {
         width: imageDimensions.width,
         height: imageDimensions.height,
       };
-      // Eğer yeniden boyutlandırma istiyorsanız, burayı açabilirsiniz:
-      // manipMeta = await ImageManipulator.manipulateAsync(
-      //   image,
-      //   [{ resize: { width: 800 } }],
-      //   { base64: true, compress: 0.7 }
-      // );
-      // setImageDimensions({ width: manipMeta.width, height: manipMeta.height });
 
       const origWidth = manipMeta.width;
       const origHeight = manipMeta.height;
       const containerWidth = displaySize.width || origWidth;
       const containerHeight = displaySize.height || origHeight;
+      
 
-      // Her path için kendi fırça boyutuna göre mask noktalarını hesapla
-      const maskSet = new Set();
+
+      // Koordinatları normalize et (0-1 arası)
+      const normalizedMask = [];
+      
+      // Container layout bilgilerini al
+      const imageRatio = origWidth / origHeight;
+      const containerRatio = containerWidth / containerHeight;
+      
+      let scale, displayWidth, displayHeight, offsetX, offsetY;
+      if (imageRatio < containerRatio) {
+        scale = containerHeight / origHeight;
+        displayHeight = containerHeight;
+        displayWidth = origWidth * scale;
+        offsetX = (containerWidth - displayWidth) / 2;
+        offsetY = 0;
+      } else {
+        scale = containerWidth / origWidth;
+        displayWidth = containerWidth;
+        displayHeight = origHeight * scale;
+        offsetX = 0;
+        offsetY = (containerHeight - displayHeight) / 2;
+      }
+      
       paths.forEach((p) => {
-        const m = optimizeMaskPoints(
-          p.points,
-          origWidth,
-          origHeight,
-          containerWidth,
-          containerHeight,
-          p.brush
-        );
-        m.forEach((pt) => {
-          maskSet.add(`${pt.x},${pt.y}`);
+        p.points.forEach((pt) => {
+          // Screen koordinatlarını display koordinatlarına dönüştür
+          const relativeX = pt.x - offsetX;
+          const relativeY = pt.y - offsetY;
+          
+          // Normalize koordinatlar (0-1 arası)
+          const normalizedX = relativeX / displayWidth;
+          const normalizedY = relativeY / displayHeight;
+          
+          // Sadece geçerli koordinatları ekle
+          if (normalizedX >= 0 && normalizedX <= 1 && normalizedY >= 0 && normalizedY <= 1) {
+            // Brush büyüklüğünü de normalize et (image boyutuna göre)
+            const normalizedBrush = (p.brush || DEFAULT_BRUSH_RADIUS) / Math.min(displayWidth, displayHeight);
+            
+            normalizedMask.push({
+              x: normalizedX,
+              y: normalizedY,
+              brush: normalizedBrush
+            });
+          }
         });
       });
-      const mask = Array.from(maskSet).map((k) => {
-        const [x, y] = k.split(",").map(Number);
-        return { x, y };
+      
+      console.log('🎯 NORMALIZE DEBUG:', {
+        displaySize: `${displaySize.width}x${displaySize.height}`,
+        originalMaskCount: paths.reduce((sum, p) => sum + p.points.length, 0),
+        normalizedMaskCount: normalizedMask.length,
+        sampleNormalized: normalizedMask.slice(0, 3)
       });
+      
+      const mask = normalizedMask;
 
       const formData = new FormData();
       formData.append("image", {
@@ -417,10 +614,13 @@ const PhotoEditScreen = () => {
       formData.append("mask", JSON.stringify(mask));
       formData.append("selectedProduct", JSON.stringify(selectedProduct));
 
-      const response = await fetch(`${API_URL}/api/public/phone/bronze-effect`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        `${API_URL}/api/public/phone/bronze-effect`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const result = await response.json();
       console.log(result);
@@ -481,15 +681,12 @@ const PhotoEditScreen = () => {
     const handleSelect = () => {
       setSelectedProduct(product);
     };
-    
+
     const isSelected = selectedProduct?.id === product.id;
-    
+
     return (
       <TouchableOpacity
-        style={[
-          styles.productItem,
-          isSelected && styles.selectedProductItem,
-        ]}
+        style={[styles.productItem, isSelected && styles.selectedProductItem]}
         onPress={handleSelect}
         activeOpacity={0.8}
       >
@@ -506,10 +703,18 @@ const PhotoEditScreen = () => {
             )}
           </View>
           <View style={styles.productInfo}>
-            <Text style={[styles.productName, isSelected && styles.selectedText]} numberOfLines={2}>
+            <Text
+              style={[styles.productName, isSelected && styles.selectedText]}
+              numberOfLines={2}
+            >
               {product.name}
             </Text>
-            <Text style={[styles.productPrice, isSelected && styles.selectedPriceText]}>
+            <Text
+              style={[
+                styles.productPrice,
+                isSelected && styles.selectedPriceText,
+              ]}
+            >
               {product.price} TL
             </Text>
           </View>
@@ -520,26 +725,103 @@ const PhotoEditScreen = () => {
 
   const pickImage = async () => {
     console.log("Galeri açılıyor...");
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Hata", "Galeriye erişim izni gerekiyor!");
-      return;
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log("Galeri izin durumu:", status);
+      
+      if (status !== "granted") {
+        Alert.alert("Hata", "Galeriye erişim izni gerekiyor!");
+        return;
+      }
+      
+      console.log("ImagePicker başlatılıyor...");
+              const result = await ImagePicker.launchImageLibraryAsync({
+          allowsEditing: true,
+          aspect: [9, 16], // Modern mobil format: 9:16 (büyük görünüm)
+          quality: 1,
+        });
+      
+      console.log("ImagePicker sonucu:", result);
+      
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        console.log("Seçilen asset:", { width: asset.width, height: asset.height });
+        
+        // 9:16 ratio kontrolü ve zorunlu kırpma
+        const currentRatio = asset.width / asset.height;
+        const targetRatio = 9/16;
+        const ratioTolerance = 0.05;
+        
+        if (Math.abs(currentRatio - targetRatio) > ratioTolerance) {
+          console.log("⚠️ Aspect ratio uyumsuz, zorunlu kırpma uygulanıyor...");
+          
+          // 9:16 ratio için ideal boyutları hesapla
+          let newWidth, newHeight;
+          if (currentRatio > targetRatio) {
+            // Image çok geniş - genişliği kırp
+            newHeight = asset.height;
+            newWidth = Math.round(newHeight * targetRatio);
+          } else {
+            // Image çok dar - yüksekliği kırp
+            newWidth = asset.width;
+            newHeight = Math.round(newWidth / targetRatio);
+          }
+          
+          const originX = Math.round((asset.width - newWidth) / 2);
+          const originY = Math.round((asset.height - newHeight) / 2);
+          
+          console.log("🔄 Kırpma parametreleri:", {
+            original: `${asset.width}x${asset.height}`,
+            target: `${newWidth}x${newHeight}`,
+            crop: `${originX},${originY}`
+          });
+          
+          try {
+            const manipulatedImage = await ImageManipulator.manipulateAsync(
+              asset.uri,
+              [{
+                crop: {
+                  originX,
+                  originY,
+                  width: newWidth,
+                  height: newHeight
+                }
+              }],
+              { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            
+            console.log("✅ Kırpma tamamlandı:", {
+              width: manipulatedImage.width,
+              height: manipulatedImage.height,
+              ratio: (manipulatedImage.width / manipulatedImage.height).toFixed(3)
+            });
+            
+            setImage(manipulatedImage.uri);
+            setImageDimensions({ 
+              width: manipulatedImage.width, 
+              height: manipulatedImage.height 
+            });
+          } catch (error) {
+            console.error("❌ Kırpma hatası:", error);
+            Alert.alert("Hata", "Fotoğraf kırpılırken hata oluştu");
+            return;
+          }
+        } else {
+          setImage(asset.uri);
+          setImageDimensions({ width: asset.width, height: asset.height });
+        }
+        
+        setPaths([]);
+        setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
+        setSelectedProduct(null);
+        setStep(1);
+      } else {
+        console.log("Galeri seçimi iptal edildi");
+      }
+    } catch (error) {
+      console.error("Galeri hatası:", error);
+      Alert.alert("Hata", "Galeri açılırken hata oluştu: " + error.message);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      aspect: [9, 16],
-      quality: 1,
-    });
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      setImage(asset.uri);
-      setImageDimensions({ width: asset.width, height: asset.height });
-      setPaths([]);
-      setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
-      setSelectedProduct(null);
-    }
-    setStep(1);
   };
 
   return (
@@ -556,10 +838,14 @@ const PhotoEditScreen = () => {
             <View style={styles.step0Container}>
               <Text style={styles.title}>Fotoğraf Seç</Text>
               <Text style={styles.desc}>
-                Bronzlaştırıcı etkileri denemek için hemen bir fotoğraf seçmen yeterli!
+                Bronzlaştırıcı etkileri denemek için hemen bir fotoğraf seçmen
+                yeterli!
               </Text>
               <View style={styles.actions}>
-                <Text style={styles.actionText}>Yüz veya vücut bölgelerine bronzlaştırıcı krem uygulamak için hemen </Text>
+                <Text style={styles.actionText}>
+                  Yüz veya vücut bölgelerine bronzlaştırıcı krem uygulamak için
+                  hemen{" "}
+                </Text>
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={takePhoto}
@@ -604,9 +890,9 @@ const PhotoEditScreen = () => {
                   (step === 1 &&
                     paths.length > 0 &&
                     styles.floatingTopNavActive) ||
-                  (step === 2 &&
-                    selectedProduct &&
-                    styles.floatingTopNavActive),
+                    (step === 2 &&
+                      selectedProduct &&
+                      styles.floatingTopNavActive),
                 ]}
                 onPress={() => {
                   if (step === 1) {
@@ -641,12 +927,7 @@ const PhotoEditScreen = () => {
                 ref={imageRef}
                 source={{ uri: image }}
                 style={styles.image}
-                resizeMode="cover"
-                aspectRatio={[9, 16]}
-                onLayout={(e) => {
-                  const { width, height } = e.nativeEvent.layout;
-                  setDisplaySize({ width, height });
-                }}
+                resizeMode="contain"
                 onLoad={onImageLoad}
               />
 
@@ -656,7 +937,7 @@ const PhotoEditScreen = () => {
                     ? eraseMode
                       ? onEraseGestureEvent
                       : onGestureEvent
-                    : () => { }
+                    : () => {}
                 }
                 onHandlerStateChange={({ nativeEvent }) => {
                   const s = nativeEvent.state;
@@ -671,7 +952,14 @@ const PhotoEditScreen = () => {
                   }
                 }}
               >
-                <Animated.View style={StyleSheet.absoluteFill}>
+                <Animated.View 
+                  style={StyleSheet.absoluteFill}
+                  onLayout={(e) => {
+                    const { width, height } = e.nativeEvent.layout;
+                    console.log("📐 Container Layout:", { width, height });
+                    setDisplaySize({ width, height });
+                  }}
+                >
                   <Svg style={StyleSheet.absoluteFill}>
                     {paths.map((p, index) => (
                       <Path
@@ -810,7 +1098,7 @@ const PhotoEditScreen = () => {
               )}
 
               {step === 2 && (
-                <Animated.View 
+                <Animated.View
                   style={[
                     styles.productsOverlay,
                     {
@@ -832,7 +1120,7 @@ const PhotoEditScreen = () => {
                     },
                   ]}
                 >
-                  <Animated.View 
+                  <Animated.View
                     style={[
                       styles.productsHeader,
                       {
@@ -856,7 +1144,7 @@ const PhotoEditScreen = () => {
                       Bronzlaştırıcı kremlerin arasından birini seçin
                     </Text>
                   </Animated.View>
-                  <Animated.View 
+                  <Animated.View
                     style={[
                       styles.productsScrollContainer,
                       {
@@ -882,7 +1170,9 @@ const PhotoEditScreen = () => {
                       horizontal
                       showsHorizontalScrollIndicator={false}
                       contentContainerStyle={styles.productsListContent}
-                      ItemSeparatorComponent={() => <View style={styles.productSeparator} />}
+                      ItemSeparatorComponent={() => (
+                        <View style={styles.productSeparator} />
+                      )}
                     />
                   </Animated.View>
                 </Animated.View>
@@ -902,9 +1192,11 @@ const PhotoEditScreen = () => {
           </>
         )}
         {step === 3 && (
-          <ScrollView style={{
-            flex: 1,
-          }}>
+          <ScrollView
+            style={{
+              flex: 1,
+            }}
+          >
             <View style={styles.step1Container}>
               <TouchableOpacity
                 style={styles.floatingTopNavBack}
@@ -917,29 +1209,34 @@ const PhotoEditScreen = () => {
               <Image
                 source={{ uri: resultImage }}
                 style={styles.resultImage}
-                resizeMode="cover"
-                aspectRatio={[9, 16]}
+                resizeMode="contain"
               />
               <View style={styles.resultButtonsContainer}>
                 <TouchableOpacity style={styles.resultButtons}>
                   <Text>Paylaş</Text>
                 </TouchableOpacity>
-                <Text style={{
-                  textAlign: "center",
-                  fontSize: 12,
-                  color: COLORS.text,
-                }}>
+                <Text
+                  style={{
+                    textAlign: "center",
+                    fontSize: 12,
+                    color: COLORS.text,
+                  }}
+                >
                   {`Fotoğrafınızı paylaşın ve sizin için özel oluşturulan indirim kodunu kaçırmayın!`}
                 </Text>
                 <TouchableOpacity style={styles.resultButtons}>
                   <Text>Hemen Satın Al</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={{
-                textAlign: "center",
-                fontSize: 12,
-                color: COLORS.text,
-              }}>Ayrıca diğer kullanıcıların deneyimlerini de görebilirsiniz</Text>
+              <Text
+                style={{
+                  textAlign: "center",
+                  fontSize: 12,
+                  color: COLORS.text,
+                }}
+              >
+                Ayrıca diğer kullanıcıların deneyimlerini de görebilirsiniz
+              </Text>
 
               <View style={styles.resultSuggestions}>
                 <View style={styles.resultSuggestionItem}></View>
@@ -1006,6 +1303,8 @@ const styles = StyleSheet.create({
   step1Container: {
     position: "relative",
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   floatingTopNavBack: {
     position: "absolute",
@@ -1056,6 +1355,9 @@ const styles = StyleSheet.create({
   },
   image: {
     flex: 1,
+    aspectRatio: 9/16, // Modern mobil format: 9:16 (büyük görünüm)
+    width: '100%',
+    maxHeight: '100%',
   },
   floatingButtonContainer: {
     position: "absolute",
@@ -1174,7 +1476,7 @@ const styles = StyleSheet.create({
   },
   resultImage: {
     width: "100%",
-    height:500,
+    height: 500,
     borderRadius: 10,
     objectFit: "contain",
   },
@@ -1184,7 +1486,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     textAlign: "center",
     width: "100%",
-    padding: 10
+    padding: 10,
   },
   resultButtons: {
     backgroundColor: COLORS.button,
@@ -1213,55 +1515,54 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.button,
     borderRadius: 10,
   },
-     productsOverlay: {
-     position: "absolute",
-     top: 0,
-     left: 0,
-     right: 0,
-     bottom: 0,
-     backgroundColor: "rgba(244, 235, 208, 0.95)",
-     backdropFilter: "blur(10px)",
-     zIndex: 100,
-     padding: 20,
-     alignItems: "center",
-     justifyContent: "center",
-   },
-   productsHeader: {
-     alignItems: "center",
-     marginBottom: 30,
-     paddingHorizontal: 20,
-   },
-   productsTitle: {
-     fontSize: 32,
-     fontWeight: "800",
-     color: COLORS.text,
-     marginBottom: 8,
-     textShadowColor: "rgba(0,0,0,0.1)",
-     textShadowOffset: { width: 0, height: 1 },
-     textShadowRadius: 2,
-   },
-   productsSubtitle: {
-     fontSize: 18,
-     color: COLORS.text,
-     textAlign: "center",
-     opacity: 0.8,
-     fontWeight: "500",
-   },
-   productsScrollContainer: {
-     width: "100%",
-     maxHeight: 220,
-     borderRadius: 15,
-     backgroundColor: "rgba(255,255,255,0.3)",
-     paddingVertical: 10,
-   },
-   productsListContent: {
-     paddingHorizontal: 20,
-     alignItems: "center",
-   },
-   productSeparator: {
-     width: 15,
-   }
+  productsOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(244, 235, 208, 0.95)",
+    backdropFilter: "blur(10px)",
+    zIndex: 100,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productsHeader: {
+    alignItems: "center",
+    marginBottom: 30,
+    paddingHorizontal: 20,
+  },
+  productsTitle: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: COLORS.text,
+    marginBottom: 8,
+    textShadowColor: "rgba(0,0,0,0.1)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  productsSubtitle: {
+    fontSize: 18,
+    color: COLORS.text,
+    textAlign: "center",
+    opacity: 0.8,
+    fontWeight: "500",
+  },
+  productsScrollContainer: {
+    width: "100%",
+    maxHeight: 220,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    paddingVertical: 10,
+  },
+  productsListContent: {
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  productSeparator: {
+    width: 15,
+  },
 });
-
 
 export default PhotoEditScreen;
