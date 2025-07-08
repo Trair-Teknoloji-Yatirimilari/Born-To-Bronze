@@ -177,12 +177,13 @@ function optimizeMaskPoints(
   return mask;
 }
 
-const API_URL = __DEV__
-  ? Platform.select({
-    ios: "http://localhost:3000",
-    android: "http://10.0.2.2:3000",
-  })
-  : "https://your-production-api.com";
+const API_URL = 'http://185.153.231.151:1003'
+// __DEV__
+//   ? Platform.select({
+//     ios: "http://localhost:3000",
+//     android: "http://10.0.2.2:3000",
+//   })
+//   : "https://your-production-api.com";
 
 const PhotoEditScreen = () => {
   const [step, setStep] = useState(0); // 0: Fotoğraf seçme, 1: Alan Seçme, 2: Ürün seçme, 3: Bronzlaştır
@@ -422,9 +423,10 @@ const PhotoEditScreen = () => {
       });
 
       const result = await response.json();
+      console.log(result);
       if (result.success) {
         // Görüntüyü göster
-        const imageUrl = `http://localhost:3000${result.imageUrl}`; //TODO: API_URL'ye göre değiştirilecek
+        const imageUrl = `${API_URL}${result.imageUrl}`; //TODO: API_URL'ye göre değiştirilecek
         setResultImage(imageUrl);
         setStep(3);
       } else {
@@ -432,6 +434,7 @@ const PhotoEditScreen = () => {
       }
     } catch (e) {
       Alert.alert("Hata", "Filtre uygulanırken hata oluştu: " + e.message);
+      console.log(e);
     } finally {
       setLoading(false);
     }
