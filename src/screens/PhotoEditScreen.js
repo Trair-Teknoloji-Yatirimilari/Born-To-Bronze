@@ -299,10 +299,17 @@ const PhotoEditScreen = () => {
   const [brushPos, setBrushPos] = useState(null);
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
   const [resultImage, setResultImage] = useState(null);
+  const [resultImageId, setResultImageId] = useState(null); // Paylaş için gerekli
   const [showOriginal, setShowOriginal] = useState(false); // Before/After kontrolü
   const paintedRef = useRef(new Set()); // Boyanmış grid anahtarları
   const productAnimationValue = useRef(new Animated.Value(0)).current;
   const originalImageOpacity = useRef(new Animated.Value(0)).current;
+  
+  // Benzer fotoğraflar için state'ler
+  const [similarPhotos, setSimilarPhotos] = useState([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
+  const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
+  const modalOpacity = useRef(new Animated.Value(0)).current;
 
   // Bottom Tab Bar kontrolü - çizim aşamasında gizle
   useEffect(() => {
@@ -336,6 +343,13 @@ const PhotoEditScreen = () => {
     };
   }, []);
 
+  // Result ekranında benzer fotoğrafları yükle
+  useEffect(() => {
+    if (step === 3 && selectedProduct?.id) {
+      fetchSimilarPhotos(selectedProduct.id, resultImageId);
+    }
+  }, [step, selectedProduct?.id, resultImageId]);
+
   // Ürün seçimi ekranı animasyonu
   useEffect(() => {
     if (step === 2) {
@@ -366,6 +380,105 @@ const PhotoEditScreen = () => {
       useNativeDriver: true,
     }).start(() => {
       setShowOriginal(false);
+    });
+  };
+
+  // Paylaş fonksiyonu
+  const sharePhoto = async () => {
+    if (!resultImageId) {
+      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageId: resultImageId,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        Alert.alert(
+          "Başarılı! 🎉", 
+          "Fotoğrafınız başarıyla paylaşıldı! Şimdi diğer kullanıcılar da görebilir.",
+          [
+            {
+              text: "Tamam",
+              style: "default"
+            }
+          ]
+        );
+        // Paylaş sonrası benzer fotoğrafları yenile
+        if (selectedProduct?.id) {
+          fetchSimilarPhotos(selectedProduct.id, resultImageId);
+        }
+      } else {
+        Alert.alert("Hata", result.error || "Paylaşım sırasında hata oluştu.");
+      }
+    } catch (error) {
+      console.error("Paylaş hatası:", error);
+      Alert.alert("Hata", "Paylaşım sırasında bağlantı hatası oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Benzer fotoğrafları getir
+  const fetchSimilarPhotos = async (productId, currentImageId = null) => {
+    if (!productId) return;
+    
+    setLoadingSimilar(true);
+    try {
+      const params = new URLSearchParams({
+        productId: productId.toString(),
+        limit: "10"
+      });
+      
+      if (currentImageId) {
+        params.append("currentImageId", currentImageId);
+      }
+      
+      const response = await fetch(`${API_URL}/api/public/phone/similar-photos?${params}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setSimilarPhotos(result.photos || []);
+      } else {
+        console.error("Benzer fotoğraflar alınamadı:", result.error);
+        setSimilarPhotos([]);
+      }
+    } catch (error) {
+      console.error("Benzer fotoğraflar hatası:", error);
+      setSimilarPhotos([]);
+    } finally {
+      setLoadingSimilar(false);
+    }
+  };
+
+  // Modal açma/kapama fonksiyonları
+  const openPhotoModal = (photo) => {
+    setSelectedPhotoModal(photo);
+    Animated.timing(modalOpacity, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closePhotoModal = () => {
+    Animated.timing(modalOpacity, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setSelectedPhotoModal(null);
     });
   };
 
@@ -683,8 +796,9 @@ const PhotoEditScreen = () => {
       console.log(result);
       if (result.success) {
         // Görüntüyü göster
-        const imageUrl = `${API_URL}${result.imageUrl}`; //TODO: API_URL'ye göre değiştirilecek
+        const imageUrl = `${API_URL}${result.imageUrl}`;
         setResultImage(imageUrl);
+        setResultImageId(result.imageId); // Paylaş için imageId'yi kaydet
         setStep(3);
       } else {
         Alert.alert("Hata", "Filtrelenmiş fotoğraf alınamadı.");
@@ -1307,8 +1421,15 @@ const PhotoEditScreen = () => {
                 </TouchableOpacity>
               </View>
               <View style={styles.resultButtonsContainer}>
-                <TouchableOpacity style={styles.resultButtons}>
-                  <Text>Paylaş</Text>
+                <TouchableOpacity 
+                  style={[styles.resultButtons, styles.shareButton]}
+                  onPress={sharePhoto}
+                  disabled={loading}
+                >
+                  <Ionicons name="share-social" size={20} color={COLORS.text} />
+                  <Text style={styles.buttonText}>
+                    {loading ? "Paylaşılıyor..." : "Paylaş"}
+                  </Text>
                 </TouchableOpacity>
                 <Text
                   style={{
@@ -1323,24 +1444,134 @@ const PhotoEditScreen = () => {
                   <Text>Hemen Satın Al</Text>
                 </TouchableOpacity>
               </View>
-              <Text
-                style={{
-                  textAlign: "center",
-                  fontSize: 12,
-                  color: COLORS.text,
-                }}
-              >
-                Ayrıca diğer kullanıcıların deneyimlerini de görebilirsiniz
-              </Text>
+              {/* Benzer Fotoğraflar Bölümü */}
+              <View style={styles.similarPhotosSection}>
+                <View style={styles.similarPhotosHeader}>
+                  <Text style={styles.similarPhotosTitle}>
+                    {selectedProduct?.name} ile Yapılan Diğer Çalışmalar
+                  </Text>
+                  <Text style={styles.similarPhotosSubtitle}>
+                    Aynı ürünü kullanan diğer kullanıcıların sonuçlarını keşfet
+                  </Text>
+                </View>
 
-              <View style={styles.resultSuggestions}>
-                <View style={styles.resultSuggestionItem}></View>
-                <View style={styles.resultSuggestionItem}></View>
-                <View style={styles.resultSuggestionItem}></View>
-                <View style={styles.resultSuggestionItem}></View>
+                {loadingSimilar ? (
+                  <View style={styles.similarPhotosLoading}>
+                    <ActivityIndicator size="large" color={COLORS.active} />
+                    <Text style={styles.loadingText}>Benzer çalışmalar yükleniyor...</Text>
+                  </View>
+                ) : similarPhotos.length > 0 ? (
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.similarPhotosScrollContent}
+                    style={styles.similarPhotosScroll}
+                  >
+                    {similarPhotos.map((photo, index) => (
+                      <TouchableOpacity
+                        key={photo.id}
+                        style={styles.similarPhotoItem}
+                        onPress={() => openPhotoModal(photo)}
+                        activeOpacity={0.8}
+                      >
+                        <Image
+                          source={{ uri: `${API_URL}${photo.url}` }}
+                          style={styles.similarPhotoImage}
+                          resizeMode="cover"
+                        />
+                        <LinearGradient
+                          colors={['transparent', 'rgba(0,0,0,0.6)']}
+                          style={styles.similarPhotoGradient}
+                        >
+                          <View style={styles.similarPhotoInfo}>
+                            <View style={styles.deviceBadge}>
+                              <Ionicons 
+                                name={photo.device === 'iPhone' ? 'phone-portrait' : 'phone-portrait-outline'} 
+                                size={10} 
+                                color="#FFFFFF" 
+                              />
+                              <Text style={styles.deviceText}>{photo.device}</Text>
+                            </View>
+                          </View>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.noSimilarPhotos}>
+                    <Ionicons name="camera-outline" size={48} color={COLORS.text} />
+                    <Text style={styles.noSimilarPhotosTitle}>Henüz paylaşım yok</Text>
+                    <Text style={styles.noSimilarPhotosDesc}>
+                      Bu ürünle yapılan ilk paylaşım olacaksın!
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </ScrollView>
+        )}
+
+        {/* Fotoğraf Büyük Görünüm Modal'ı */}
+        {selectedPhotoModal && (
+          <Modal transparent visible animationType="none">
+            <Animated.View 
+              style={[
+                styles.photoModal,
+                { opacity: modalOpacity }
+              ]}
+            >
+              <TouchableOpacity 
+                style={styles.modalBackdrop}
+                onPress={closePhotoModal}
+                activeOpacity={1}
+              >
+                <View style={styles.modalContent}>
+                  <TouchableOpacity 
+                    style={styles.modalCloseButton}
+                    onPress={closePhotoModal}
+                  >
+                    <Ionicons name="close" size={28} color="#FFFFFF" />
+                  </TouchableOpacity>
+                  
+                  <Image
+                    source={{ uri: `${API_URL}${selectedPhotoModal.url}` }}
+                    style={styles.modalImage}
+                    resizeMode="contain"
+                  />
+                  
+                  <View style={styles.modalPhotoInfo}>
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0,0,0,0.8)']}
+                      style={styles.modalInfoGradient}
+                    >
+                      <Text style={styles.modalProductName}>
+                        {selectedPhotoModal.productName}
+                      </Text>
+                      <View style={styles.modalMetaInfo}>
+                        <View style={styles.modalDeviceBadge}>
+                          <Ionicons 
+                            name={selectedPhotoModal.device === 'iPhone' ? 'phone-portrait' : 'phone-portrait-outline'} 
+                            size={14} 
+                            color="#FFFFFF" 
+                          />
+                          <Text style={styles.modalDeviceText}>
+                            {selectedPhotoModal.device}
+                          </Text>
+                        </View>
+                        <Text style={styles.modalDate}>
+                          {new Date(selectedPhotoModal.createdAt).toLocaleDateString('tr-TR', {
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric'
+                          })}
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+          </Modal>
         )}
       </LinearGradient>
     </ImageBackground>
@@ -1643,28 +1874,201 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.button,
     padding: 10,
     borderRadius: 10,
-    width: "100",
     width: "100%",
     height: 50,
     justifyContent: "center",
     alignItems: "center",
-  },
-  resultSuggestions: {
-    display: "flex",
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 10,
+    gap: 8,
   },
-  resultSuggestionItem: {
-    width: 150,
-    height: 150,
-    backgroundColor: COLORS.button,
-    borderRadius: 10,
+  shareButton: {
+    backgroundColor: "#4CAF50", // Yeşil paylaş butonu
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  buttonText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  // Benzer Fotoğraflar Bölümü Stilleri
+  similarPhotosSection: {
+    marginTop: 20,
+    paddingHorizontal: 20,
+  },
+  similarPhotosHeader: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  similarPhotosTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  similarPhotosSubtitle: {
+    fontSize: 16,
+    color: COLORS.text,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  similarPhotosLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  similarPhotosScroll: {
+    marginHorizontal: -10,
+  },
+  similarPhotosScrollContent: {
+    paddingHorizontal: 10,
+  },
+  similarPhotoItem: {
+    width: 140,
+    height: 180,
+    marginHorizontal: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  similarPhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  similarPhotoGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    justifyContent: 'flex-end',
+    padding: 12,
+  },
+  similarPhotoInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  deviceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  deviceText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  noSimilarPhotos: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    opacity: 0.6,
+  },
+  noSimilarPhotosTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noSimilarPhotosDesc: {
+    fontSize: 14,
+    color: COLORS.text,
+    textAlign: 'center',
+    opacity: 0.7,
+    lineHeight: 20,
+  },
+
+  // Modal Stilleri
+  photoModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBackdrop: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    height: '80%',
+    position: 'relative',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: -50,
+    right: 10,
+    zIndex: 1000,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  modalPhotoInfo: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+  },
+  modalInfoGradient: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 20,
+  },
+  modalProductName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  modalMetaInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalDeviceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  modalDeviceText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalDate: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '500',
   },
   productsOverlay: {
     position: "absolute",
