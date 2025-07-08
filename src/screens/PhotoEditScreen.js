@@ -14,7 +14,9 @@ import {
   Platform,
   ImageBackground,
   useAnimatedValue,
+  StatusBar,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import Slider from "@react-native-community/slider";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -273,6 +275,7 @@ const API_URL = __DEV__
   : "https://your-production-api.com";
 
 const PhotoEditScreen = () => {
+  const navigation = useNavigation();
   const [step, setStep] = useState(0); // 0: Fotoğraf seçme, 1: Alan Seçme, 2: Ürün seçme, 3: Bronzlaştır
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -296,8 +299,42 @@ const PhotoEditScreen = () => {
   const [brushPos, setBrushPos] = useState(null);
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
   const [resultImage, setResultImage] = useState(null);
+  const [showOriginal, setShowOriginal] = useState(false); // Before/After kontrolü
   const paintedRef = useRef(new Set()); // Boyanmış grid anahtarları
   const productAnimationValue = useRef(new Animated.Value(0)).current;
+  const originalImageOpacity = useRef(new Animated.Value(0)).current;
+
+  // Bottom Tab Bar kontrolü - çizim aşamasında gizle
+  useEffect(() => {
+    if (step === 1 || step === 2) {
+      // Çizim ve ürün seçimi aşamasında tab bar'ı gizle ve status bar'ı gizle
+      navigation.setOptions({
+        tabBarStyle: { display: 'none' }
+      });
+      StatusBar.setHidden(true, 'slide');
+    } else {
+      // Diğer aşamalarda tab bar'ı göster ve status bar'ı göster
+      navigation.setOptions({
+        tabBarStyle: {
+          backgroundColor: COLORS.background,
+          backdropFilter: "blur(10px)",
+          borderTopWidth: 1,
+          borderTopColor: COLORS.text,
+          position: "absolute",
+          height: 60,
+          paddingBottom: 5,
+        }
+      });
+      StatusBar.setHidden(false, 'slide');
+    }
+  }, [step, navigation]);
+
+  // Component unmount olduğunda status bar'ı geri getir
+  useEffect(() => {
+    return () => {
+      StatusBar.setHidden(false, 'slide');
+    };
+  }, []);
 
   // Ürün seçimi ekranı animasyonu
   useEffect(() => {
@@ -311,6 +348,26 @@ const PhotoEditScreen = () => {
       productAnimationValue.setValue(0);
     }
   }, [step]);
+
+  // Before/After görüntü kontrolü
+  const showOriginalImage = () => {
+    setShowOriginal(true);
+    Animated.timing(originalImageOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const hideOriginalImage = () => {
+    Animated.timing(originalImageOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowOriginal(false);
+    });
+  };
 
   // Fırça boyutunu güncelleme fonksiyonu
   const updateBrushSize = (size) => {
@@ -1206,11 +1263,49 @@ const PhotoEditScreen = () => {
               >
                 <Text style={styles.floatingTopNavText}>Geri Dön</Text>
               </TouchableOpacity>
-              <Image
-                source={{ uri: resultImage }}
-                style={styles.resultImage}
-                resizeMode="contain"
-              />
+              <View style={styles.resultImageContainer}>
+                {/* Filtered (Result) Image */}
+                <Image
+                  source={{ uri: resultImage }}
+                  style={styles.resultImage}
+                  resizeMode="contain"
+                />
+                
+                {/* Interactive Overlay */}
+                <TouchableOpacity
+                  style={styles.resultImageOverlay}
+                  activeOpacity={1}
+                  onPressIn={showOriginalImage}
+                  onPressOut={hideOriginalImage}
+                >
+                  {/* Original Image Overlay */}
+                  {showOriginal && (
+                    <Animated.View 
+                      style={[
+                        styles.originalImageOverlay,
+                        { opacity: originalImageOpacity }
+                      ]}
+                    >
+                      <Image
+                        source={{ uri: image }}
+                        style={styles.resultImage}
+                        resizeMode="contain"
+                      />
+                      <View style={styles.originalImageLabel}>
+                        <Text style={styles.originalImageLabelText}>ORİJİNAL</Text>
+                      </View>
+                    </Animated.View>
+                  )}
+                  
+                  {/* Touch Instructions */}
+                  <View style={styles.touchInstructions}>
+                    <Ionicons name="hand-left" size={20} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.touchInstructionsText}>
+                      Basılı tutarak orijinali gör
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
               <View style={styles.resultButtonsContainer}>
                 <TouchableOpacity style={styles.resultButtons}>
                   <Text>Paylaş</Text>
@@ -1474,11 +1569,67 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
+  resultImageContainer: {
+    position: 'relative',
+    width: "100%",
+    height: 500,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
   resultImage: {
     width: "100%",
     height: 500,
     borderRadius: 10,
     objectFit: "contain",
+  },
+  resultImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  originalImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  originalImageLabel: {
+    position: 'absolute',
+    top: 20,
+    left: '40%',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  originalImageLabelText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+  touchInstructions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  touchInstructionsText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 14,
+    fontWeight: '500',
   },
   resultButtonsContainer: {
     gap: 3,
