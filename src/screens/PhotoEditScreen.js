@@ -32,6 +32,7 @@ import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
 import { PRODUCTS } from "../constants/products";
+import DeviceInfo from 'react-native-device-info';
 
 // Fırça boyutu için sabitleri güncelliyoruz
 const MIN_BRUSH_RADIUS = 5;
@@ -273,6 +274,74 @@ const API_URL = __DEV__
       android: "http://10.0.2.2:3000",
     })
   : "https://your-production-api.com";
+
+// Device bilgilerini toplayan utility fonksiyon
+const getDeviceInfo = async () => {
+  try {
+    const [
+      uniqueId,
+      deviceId,
+      deviceName,
+      brand,
+      deviceType,
+      systemName,
+      systemVersion,
+      userAgent,
+      appVersion,
+      buildNumber,
+      bundleId,
+      isEmulator,
+      isTablet,
+    ] = await Promise.all([
+      DeviceInfo.getUniqueId(),
+      DeviceInfo.getDeviceId(),
+      DeviceInfo.getDeviceName(),
+      DeviceInfo.getBrand(),
+      DeviceInfo.getDeviceType(),
+      DeviceInfo.getSystemName(),
+      DeviceInfo.getSystemVersion(),
+      DeviceInfo.getUserAgent(),
+      DeviceInfo.getVersion(),
+      DeviceInfo.getBuildNumber(),
+      DeviceInfo.getBundleId(),
+      DeviceInfo.isEmulator(),
+      DeviceInfo.isTablet(),
+    ]);
+
+    return {
+      uniqueId,
+      deviceId,
+      deviceName,
+      deviceBrand: brand,
+      deviceType,
+      systemName,
+      systemVersion,
+      userAgent,
+      appVersion,
+      buildNumber,
+      bundleId,
+      isEmulator,
+      isTablet,
+    };
+  } catch (error) {
+    console.error('Device bilgileri alınırken hata:', error);
+    return {
+      uniqueId: null,
+      deviceId: null,
+      deviceName: null,
+      deviceBrand: null,
+      deviceType: null,
+      systemName: Platform.OS,
+      systemVersion: Platform.Version?.toString(),
+      userAgent: null,
+      appVersion: null,
+      buildNumber: null,
+      bundleId: null,
+      isEmulator: false,
+      isTablet: false,
+    };
+  }
+};
 
 const PhotoEditScreen = () => {
   const navigation = useNavigation();
@@ -775,6 +844,15 @@ const PhotoEditScreen = () => {
       
       const mask = normalizedMask;
 
+      // Device bilgilerini al
+      const deviceInfo = await getDeviceInfo();
+      console.log('📱 Device Info:', {
+        brand: deviceInfo.deviceBrand,
+        model: deviceInfo.deviceId,
+        os: `${deviceInfo.systemName} ${deviceInfo.systemVersion}`,
+        uniqueId: deviceInfo.uniqueId?.substring(0, 8) + '...' // Security için sadece ilk 8 karakter
+      });
+
       const formData = new FormData();
       formData.append("image", {
         uri: manipMeta.uri,
@@ -783,6 +861,7 @@ const PhotoEditScreen = () => {
       });
       formData.append("mask", JSON.stringify(mask));
       formData.append("selectedProduct", JSON.stringify(selectedProduct));
+      formData.append("deviceInfo", JSON.stringify(deviceInfo));
 
       const response = await fetch(
         `${API_URL}/api/public/phone/bronze-effect`,
