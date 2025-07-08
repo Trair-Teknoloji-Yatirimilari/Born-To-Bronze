@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -209,6 +209,20 @@ const PhotoEditScreen = () => {
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
   const [resultImage, setResultImage] = useState(null);
   const paintedRef = useRef(new Set()); // Boyanmış grid anahtarları
+  const productAnimationValue = useRef(new Animated.Value(0)).current;
+
+  // Ürün seçimi ekranı animasyonu
+  useEffect(() => {
+    if (step === 2) {
+      Animated.timing(productAnimationValue, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      productAnimationValue.setValue(0);
+    }
+  }, [step]);
 
   // Fırça boyutunu güncelleme fonksiyonu
   const updateBrushSize = (size) => {
@@ -464,17 +478,39 @@ const PhotoEditScreen = () => {
     const handleSelect = () => {
       setSelectedProduct(product);
     };
+    
+    const isSelected = selectedProduct?.id === product.id;
+    
     return (
       <TouchableOpacity
         style={[
           styles.productItem,
-          selectedProduct?.id === product.id && styles.selectedProductItem,
+          isSelected && styles.selectedProductItem,
         ]}
         onPress={handleSelect}
+        activeOpacity={0.8}
       >
-        <Image source={product.pngImage} style={styles.productImage} />
-        <Text style={styles.productName}>{product.name}</Text>
-        <Text style={styles.productPrice}>{product.price} TL</Text>
+        <LinearGradient
+          colors={isSelected ? ["#FFD700", "#FFA500"] : ["#FFFFFF", "#F5F5F5"]}
+          style={styles.productGradient}
+        >
+          <View style={styles.productImageContainer}>
+            <Image source={product.pngImage} style={styles.productImage} />
+            {isSelected && (
+              <View style={styles.selectedIndicator}>
+                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+              </View>
+            )}
+          </View>
+          <View style={styles.productInfo}>
+            <Text style={[styles.productName, isSelected && styles.selectedText]} numberOfLines={2}>
+              {product.name}
+            </Text>
+            <Text style={[styles.productPrice, isSelected && styles.selectedPriceText]}>
+              {product.price} TL
+            </Text>
+          </View>
+        </LinearGradient>
       </TouchableOpacity>
     );
   };
@@ -771,16 +807,82 @@ const PhotoEditScreen = () => {
               )}
 
               {step === 2 && (
-                <View style={styles.productsContainer}>
-                  {/* Slider gibi yan yana sirali urunler gösterilecek */}
-                  <FlatList
-                    data={PRODUCTS}
-                    renderItem={({ item }) => <ProductItem product={item} />}
-                    keyExtractor={(item) => item.id.toString()}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                  />
-                </View>
+                <Animated.View 
+                  style={[
+                    styles.productsOverlay,
+                    {
+                      opacity: productAnimationValue,
+                      transform: [
+                        {
+                          translateY: productAnimationValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [100, 0],
+                          }),
+                        },
+                        {
+                          scale: productAnimationValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.9, 1],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <Animated.View 
+                    style={[
+                      styles.productsHeader,
+                      {
+                        opacity: productAnimationValue.interpolate({
+                          inputRange: [0, 0.5, 1],
+                          outputRange: [0, 0, 1],
+                        }),
+                        transform: [
+                          {
+                            translateY: productAnimationValue.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [20, 0],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    <Text style={styles.productsTitle}>Ürün Seçin</Text>
+                    <Text style={styles.productsSubtitle}>
+                      Bronzlaştırıcı kremlerin arasından birini seçin
+                    </Text>
+                  </Animated.View>
+                  <Animated.View 
+                    style={[
+                      styles.productsScrollContainer,
+                      {
+                        opacity: productAnimationValue.interpolate({
+                          inputRange: [0, 0.3, 1],
+                          outputRange: [0, 0, 1],
+                        }),
+                        transform: [
+                          {
+                            translateY: productAnimationValue.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [30, 0],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    <FlatList
+                      data={PRODUCTS}
+                      renderItem={({ item }) => <ProductItem product={item} />}
+                      keyExtractor={(item) => item.id.toString()}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.productsListContent}
+                      ItemSeparatorComponent={() => <View style={styles.productSeparator} />}
+                    />
+                  </Animated.View>
+                </Animated.View>
               )}
             </View>
 
@@ -980,51 +1082,76 @@ const styles = StyleSheet.create({
     borderColor: COLORS.background,
     color: COLORS.background,
   },
-  productsContainer: {
-    position: "absolute",
-    top: "70%",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "transparent",
-    flexDirection: "row",
-    width: "100%",
-    gap: 10,
-    paddingHorizontal: 10,
-  },
   productItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    width: 150,
-    height: 200,
-    marginRight: 10,
-    gap: 2,
-    borderWidth: 1,
-    borderColor: COLORS.text,
-    borderRadius: 10,
-    padding: 5,
-    backgroundColor: COLORS.background,
+    width: 140,
+    height: 180,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginVertical: 10,
   },
   selectedProductItem: {
-    backgroundColor: COLORS.active,
-    borderRadius: 10,
+    transform: [{ scale: 1.05 }],
   },
   productImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "contain",
+  },
+  productName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.text,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  productPrice: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: COLORS.active,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  productGradient: {
+    flex: 1,
+    borderRadius: 10,
+    padding: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  productImageContainer: {
     width: 100,
     height: 100,
     borderRadius: 10,
-    objectFit: "contain",
+    position: "relative",
+    overflow: "hidden",
   },
-  productName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: COLORS.text,
-    textAlign: "center",
+  selectedIndicator: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    backgroundColor: COLORS.active,
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: COLORS.background,
   },
-  productPrice: {
-    fontSize: 14,
-    color: COLORS.text,
+  productInfo: {
+    marginTop: 5,
+    alignItems: "center",
+  },
+  selectedText: {
+    color: COLORS.active,
+  },
+  selectedPriceText: {
+    color: COLORS.active,
   },
 
   loadingOverlay: {
@@ -1082,7 +1209,55 @@ const styles = StyleSheet.create({
     height: 150,
     backgroundColor: COLORS.button,
     borderRadius: 10,
-  }
+  },
+     productsOverlay: {
+     position: "absolute",
+     top: 0,
+     left: 0,
+     right: 0,
+     bottom: 0,
+     backgroundColor: "rgba(244, 235, 208, 0.95)",
+     backdropFilter: "blur(10px)",
+     zIndex: 100,
+     padding: 20,
+     alignItems: "center",
+     justifyContent: "center",
+   },
+   productsHeader: {
+     alignItems: "center",
+     marginBottom: 30,
+     paddingHorizontal: 20,
+   },
+   productsTitle: {
+     fontSize: 32,
+     fontWeight: "800",
+     color: COLORS.text,
+     marginBottom: 8,
+     textShadowColor: "rgba(0,0,0,0.1)",
+     textShadowOffset: { width: 0, height: 1 },
+     textShadowRadius: 2,
+   },
+   productsSubtitle: {
+     fontSize: 18,
+     color: COLORS.text,
+     textAlign: "center",
+     opacity: 0.8,
+     fontWeight: "500",
+   },
+   productsScrollContainer: {
+     width: "100%",
+     maxHeight: 220,
+     borderRadius: 15,
+     backgroundColor: "rgba(255,255,255,0.3)",
+     paddingVertical: 10,
+   },
+   productsListContent: {
+     paddingHorizontal: 20,
+     alignItems: "center",
+   },
+   productSeparator: {
+     width: 15,
+   }
 });
 
 

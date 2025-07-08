@@ -37,7 +37,7 @@ const RealTimeScreen = () => {
           }
         },
         {
-          fps: 60,
+          fps: 15,
         },
       ])
     : undefined;
@@ -55,9 +55,9 @@ const RealTimeScreen = () => {
     classificationMode: "none",
   });
 
-  const detectFaces = faceDetector?.detectFaces || (() => ({ faces: [] }));
+  console.log('Face detector loaded:', !!faceDetector);
 
-  const blurRadius = 25;
+  const blurRadius = 20;
   const blurFilter = Skia.ImageFilter.MakeBlur(
     blurRadius,
     blurRadius,
@@ -69,60 +69,191 @@ const RealTimeScreen = () => {
 
 
 
-  const frameProcessor = useSkiaFrameProcessor(frame => {
+  const frameProcessor = useSkiaFrameProcessor((frame) => {
     'worklet';
     frame.render();
 
-    const faces = detectFaces(frame);
-
-    for (const face of faces) {
-      if (face.contours != null) {
-        // this is a foreground face, draw precise mask with edges
-        const path = Skia.Path.Make();
-
-        const necessaryContours = [
-          'FACE',
-          'LEFT_CHEEK',
-          'RIGHT_CHEEK',
-        ];
-        for (const key of necessaryContours) {
-          const points = face.contours[key];
-          points.forEach((point, index) => {
-            if (index === 0) {
-              // it's a starting point
-              path.moveTo(point.x, point.y);
-            } else {
-              // it's a continuation
-              path.lineTo(point.x, point.y);
-            }
-          });
-          path.close();
-        }
-
-        frame.save();
-        frame.clipPath(path, ClipOp.Intersect, true);
-        frame.render(paint);
-        frame.restore();
-      } else {
-        // this is a background face, just use a simple blur circle
-        const path = Skia.Path.Make();
-        console.log(`Face at ${face.bounds.x}, ${face.bounds.y}`);
-
-        const rect = Skia.XYWHRect(
-          face.bounds.x,
-          face.bounds.y,
-          face.bounds.width,
-          face.bounds.height,
-        );
-        path.addOval(rect);
-
-        frame.save();
-        frame.clipPath(path, ClipOp.Intersect, true);
-        frame.render(paint);
-        frame.restore();
-      }
+    if (!faceDetector || !faceDetector.detectFaces) {
+      console.log('Face detector not available');
+      return;
     }
-  }, []);
+
+    try {
+      const result = faceDetector.detectFaces(frame);
+      
+      // Result direkt array olabilir, object değil
+      const faces = Array.isArray(result) ? result : (result?.faces || []);
+
+
+      for (const face of faces) {
+        
+        if (face.contours != null) {
+          try {
+            const facePoints = face.contours['FACE'] || [];
+            
+            // Gözlerin konumunu al
+            let leftEyeY = null;
+            let rightEyeY = null;
+            
+            if (face.contours['LEFT_EYE'] && face.contours['LEFT_EYE'].length > 0) {
+              leftEyeY = face.contours['LEFT_EYE'][0].y;
+            }
+            if (face.contours['RIGHT_EYE'] && face.contours['RIGHT_EYE'].length > 0) {
+              rightEyeY = face.contours['RIGHT_EYE'][0].y;
+            }
+            
+            const eyeY = leftEyeY && rightEyeY ? Math.min(leftEyeY, rightEyeY) : null;
+            
+            // Alın bölgesini blur yap (sadece gözlerin üstü)
+            if (facePoints.length > 10 && eyeY) {
+              const foreheadPath = Skia.Path.Make();
+
+              // Sadece gözlerin üstündeki noktaları al
+              const foreheadPoints = facePoints.filter(point => point.y < eyeY - 20);
+              
+              if (foreheadPoints.length > 2) {
+                // Yüzün kenar noktalarını da ekle
+                const leftEdge = facePoints.slice(0, 3);
+                const rightEdge = facePoints.slice(-3);
+                
+                const allForeheadPoints = [...leftEdge, ...foreheadPoints, ...rightEdge];
+                
+                allForeheadPoints.forEach((point, index) => {
+                  if (index === 0) {
+                    foreheadPath.moveTo(point.x, point.y);
+                  } else {
+                    foreheadPath.lineTo(point.x, point.y);
+                  }
+                });
+                foreheadPath.close();
+                
+                frame.save();
+                frame.clipPath(foreheadPath, ClipOp.Intersect, true);
+                frame.render(paint);
+                frame.restore();
+              }
+            }
+            
+            // Çene bölgesini blur yap (dudakların altı)
+            let lowerLipY = null;
+            if (face.contours['LOWER_LIP_BOTTOM'] && face.contours['LOWER_LIP_BOTTOM'].length > 0) {
+              lowerLipY = Math.max(...face.contours['LOWER_LIP_BOTTOM'].map(p => p.y));
+            }
+            
+            if (facePoints.length > 10 && lowerLipY) {
+              const chinPath = Skia.Path.Make();
+              
+              // Sadece dudakların altındaki noktaları al
+              const chinPoints = facePoints.filter(point => point.y > lowerLipY + 10);
+              
+              if (chinPoints.length > 2) {
+                chinPoints.forEach((point, index) => {
+                  if (index === 0) {
+                    chinPath.moveTo(point.x, point.y);
+                  } else {
+                    chinPath.lineTo(point.x, point.y);
+                  }
+                });
+                chinPath.close();
+                
+                frame.save();
+                frame.clipPath(chinPath, ClipOp.Intersect, true);
+                frame.render(paint);
+                frame.restore();
+              }
+            }
+            
+            // Yanak bölgelerini blur yap (gözler ve dudakların yanında)
+            if (eyeY && lowerLipY) {
+              // Sol yanak
+              const leftCheekPath = Skia.Path.Make();
+              const leftCheekPoints = facePoints.filter(point => 
+                point.x < face.bounds.x + face.bounds.width * 0.3 && 
+                point.y > eyeY + 10 && 
+                point.y < lowerLipY - 10
+              );
+              
+              if (leftCheekPoints.length > 2) {
+                leftCheekPoints.forEach((point, index) => {
+                  if (index === 0) {
+                    leftCheekPath.moveTo(point.x, point.y);
+                  } else {
+                    leftCheekPath.lineTo(point.x, point.y);
+                  }
+                });
+                leftCheekPath.close();
+                
+                frame.save();
+                frame.clipPath(leftCheekPath, ClipOp.Intersect, true);
+                frame.render(paint);
+                frame.restore();
+              }
+              
+              // Sağ yanak
+              const rightCheekPath = Skia.Path.Make();
+              const rightCheekPoints = facePoints.filter(point => 
+                point.x > face.bounds.x + face.bounds.width * 0.7 && 
+                point.y > eyeY + 10 && 
+                point.y < lowerLipY - 10
+              );
+              
+              if (rightCheekPoints.length > 2) {
+                rightCheekPoints.forEach((point, index) => {
+                  if (index === 0) {
+                    rightCheekPath.moveTo(point.x, point.y);
+                  } else {
+                    rightCheekPath.lineTo(point.x, point.y);
+                  }
+                });
+                rightCheekPath.close();
+                
+                frame.save();
+                frame.clipPath(rightCheekPath, ClipOp.Intersect, true);
+                frame.render(paint);
+                frame.restore();
+              }
+            }
+            
+          } catch (error) {
+            console.log('Bölgesel blur hatası:', error);
+            // Hata durumunda basit blur kullan
+            const path = Skia.Path.Make();
+            const rect = Skia.XYWHRect(
+              face.bounds.x,
+              face.bounds.y,
+              face.bounds.width,
+              face.bounds.height,
+            );
+            path.addOval(rect);
+
+            frame.save();
+            frame.clipPath(path, ClipOp.Intersect, true);
+            frame.render(paint);
+            frame.restore();
+          }
+          
+        } else {
+          // Eğer kontur yoksa basit yüz blur'u
+          const path = Skia.Path.Make();
+          const rect = Skia.XYWHRect(
+            face.bounds.x,
+            face.bounds.y,
+            face.bounds.width,
+            face.bounds.height,
+          );
+          path.addOval(rect);
+
+          frame.save();
+          frame.clipPath(path, ClipOp.Intersect, true);
+          frame.render(paint);
+          frame.restore();
+        }
+      }
+    } catch (error) {
+      console.log('Face detection error:', error);
+      return;
+    }
+  }, [faceDetector, paint]);
 
   const flipCamera = useCallback(() => {
     setPosition((pos) => (pos === "front" ? "back" : "front"));
