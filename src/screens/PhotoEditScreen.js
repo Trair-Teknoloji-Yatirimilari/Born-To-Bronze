@@ -15,6 +15,7 @@ import {
   ImageBackground,
   useAnimatedValue,
   StatusBar,
+  Linking,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Slider from "@react-native-community/slider";
@@ -549,6 +550,26 @@ const PhotoEditScreen = () => {
     }).start(() => {
       setSelectedPhotoModal(null);
     });
+  };
+
+  // Hemen Satın Al fonksiyonu
+  const handlePurchase = async () => {
+    if (!selectedProduct || !selectedProduct.link) {
+      Alert.alert("Hata", "Lütfen önce bir ürün seçin!");
+      return;
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(selectedProduct.link);
+      if (supported) {
+        await Linking.openURL(selectedProduct.link);
+      } else {
+        Alert.alert("Hata", "Bu link açılamıyor: " + selectedProduct.link);
+      }
+    } catch (error) {
+      console.error("Link açılırken hata:", error);
+      Alert.alert("Hata", "Satın alma sayfası açılırken hata oluştu.");
+    }
   };
 
   // Fırça boyutunu güncelleme fonksiyonu
@@ -1519,7 +1540,7 @@ const PhotoEditScreen = () => {
                 >
                   {`Fotoğrafınızı paylaşın ve sizin için özel oluşturulan indirim kodunu kaçırmayın!`}
                 </Text>
-                <TouchableOpacity style={styles.resultButtons}>
+                <TouchableOpacity style={styles.resultButtons} onPress={handlePurchase}>
                   <Text>Hemen Satın Al</Text>
                 </TouchableOpacity>
               </View>
@@ -1709,7 +1730,7 @@ const styles = StyleSheet.create({
     position: "relative",
     flex: 1,
     justifyContent: "center",
-    alignItems: "center",
+    // alignItems: "center",
   },
   floatingTopNavBack: {
     position: "absolute",
@@ -1720,7 +1741,6 @@ const styles = StyleSheet.create({
     gap: 5,
     height: 30,
     zIndex: 1000,
-    textAlign: "center",
     justifyContent: "center",
     backgroundColor: COLORS.button,
     borderRadius: 20,
@@ -1752,6 +1772,11 @@ const styles = StyleSheet.create({
   },
   floatingTopNavText: {
     color: COLORS.text,
+    display:'flex',
+    justifyContent:'center',
+    alignItems:'center',
+    textAlign:'center',
+
   },
   imageContainer: {
     flex: 1,
