@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,10 @@ import {
   Platform,
   ImageBackground,
   useAnimatedValue,
+  StatusBar,
+  Linking,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import Slider from "@react-native-community/slider";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -30,11 +33,12 @@ import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
 import { PRODUCTS } from "../constants/products";
+import DeviceInfo from 'react-native-device-info';
 
 // Fırça boyutu için sabitleri güncelliyoruz
 const MIN_BRUSH_RADIUS = 5;
 const MAX_BRUSH_RADIUS = 50;
-const DEFAULT_BRUSH_RADIUS = 20;
+const DEFAULT_BRUSH_RADIUS = 15; // 20'den 15'e düşürdüm
 
 const BRUSH_COLOR = "rgba(0,255,0,0.3)";
 let BRUSH_RADIUS = DEFAULT_BRUSH_RADIUS;
@@ -130,61 +134,218 @@ function optimizeMaskPoints(
   containerHeight,
   brushSize
 ) {
-  // Image is displayed with resizeMode="cover", which scales the image so that it
-  // completely fills the container and crops the overflow.  Therefore we should
-  // use the *larger* scale factor (Math.max) instead of the smaller one that would
-  // correspond to "contain".  This ensures that the pixel coordinates we send to
-  // the backend map exactly to the visible portion of the image the user paints on.
-  const scale = Math.max(
-    containerWidth / origWidth,
-    containerHeight / origHeight
-  );
-  const displayWidth = origWidth * scale;
-  const displayHeight = origHeight * scale;
-  const offsetX = (containerWidth - displayWidth) / 2;
-  const offsetY = (containerHeight - displayHeight) / 2;
+  console.log("🎯 Koordinat Debug:", {
+    origSize: `${origWidth}x${origHeight}`,
+    containerSize: `${containerWidth}x${containerHeight}`,
+    pointCount: points.length,
+    samplePoints: points.slice(0, 3).map(p => `(${p.x.toFixed(0)},${p.y.toFixed(0)})`)
+  });
 
-  // Ekrandaki fırça yarıçapını orijinal piksele dönüştür
-  const absBrush = Math.ceil(brushSize / scale);
+  // 9:16 aspect ratio için optimize edilmiş koordinat dönüşümü
+  const imageRatio = origWidth / origHeight;
+  const containerRatio = containerWidth / containerHeight;
+  
+  // ResizeMode "contain" için doğru scale hesaplama
+  let scale, displayWidth, displayHeight, offsetX, offsetY;
+  
+  if (imageRatio < containerRatio) {
+    // Image daha uzun - yükseklik sınırlayıcı
+    scale = containerHeight / origHeight;
+    displayHeight = containerHeight;
+    displayWidth = origWidth * scale;
+    offsetX = (containerWidth - displayWidth) / 2;
+    offsetY = 0;
+  } else {
+    // Image daha geniş - genişlik sınırlayıcı  
+    scale = containerWidth / origWidth;
+    displayWidth = containerWidth;
+    displayHeight = origHeight * scale;
+    offsetX = 0;
+    offsetY = (containerHeight - displayHeight) / 2;
+  }
+
+  console.log("📐 Transform:", {
+    scale: scale.toFixed(4),
+    displaySize: `${displayWidth.toFixed(0)}x${displayHeight.toFixed(0)}`,
+    offset: `${offsetX.toFixed(0)},${offsetY.toFixed(0)}`
+  });
+
+  // Brush parametreleri - daha küçük ve odaklı alan için
+  const absBrush = Math.min(Math.ceil(brushSize / scale), 15); // 25'ten 15'e düşürdüm
+  const gridSize = Math.max(2, Math.floor(absBrush / 8)); // 6'dan 8'e çıkardım daha az nokta için
 
   const grid = new Set();
   const mask = [];
-
-  points.forEach((pt) => {
-    // Letterbox bölgelerini çıkar
+  
+  points.forEach((pt, index) => {
+    // Screen koordinatlarını display koordinatlarına dönüştür
     const relX = pt.x - offsetX;
     const relY = pt.y - offsetY;
-    if (relX < 0 || relY < 0 || relX > displayWidth || relY > displayHeight)
+    
+    // Debug için ilk birkaç nokta
+    if (index < 3) {
+      console.log(`📍 Nokta ${index}:`, {
+        screen: `(${pt.x.toFixed(0)}, ${pt.y.toFixed(0)})`,
+        relative: `(${relX.toFixed(0)}, ${relY.toFixed(0)})`,
+        displaySize: `${displayWidth.toFixed(0)}x${displayHeight.toFixed(0)}`,
+        containerSize: `${containerWidth}x${containerHeight}`
+      });
+    }
+    
+    // Bounds kontrolü
+    if (relX < 0 || relY < 0 || relX >= displayWidth || relY >= displayHeight) {
+      if (index < 3) console.log(`❌ Nokta ${index} bounds dışında`);
       return;
+    }
 
-    const absX = Math.round(relX / scale);
-    const absY = Math.round(relY / scale);
+    // Image koordinatlarına dönüştür - Y'yi normal bırakıyorum
+    let absX = Math.round(relX / scale);
+    let absY = Math.round(relY / scale);
+    
+    // Platform-specific koordinat düzeltmeleri kaldırıldı
+    // Doğrudan koordinat dönüşümü kullanılıyor
 
-    for (let dy = -absBrush; dy <= absBrush; dy += 2) {
-      for (let dx = -absBrush; dx <= absBrush; dx += 2) {
+    if (index < 3) {
+      console.log(`🎯 FRONTEND DEBUG - Nokta ${index}:`, {
+        platform: Platform.OS,
+        screen: `(${pt.x.toFixed(0)}, ${pt.y.toFixed(0)})`,
+        relative: `(${relX.toFixed(0)}, ${relY.toFixed(0)})`,
+        image: `(${absX}, ${absY})`,
+        imagePercent: `(${(absX/origWidth*100).toFixed(1)}%, ${(absY/origHeight*100).toFixed(1)}%)`,
+        bounds: `0-${origWidth-1}, 0-${origHeight-1}`,
+        scale: scale.toFixed(4),
+        transform: {
+          screenToRelative: `(${pt.x} - ${offsetX.toFixed(0)}, ${pt.y} - ${offsetY.toFixed(0)})`,
+          relativeToImage: `(${relX.toFixed(0)} / ${scale.toFixed(4)}, ${relY.toFixed(0)} / ${scale.toFixed(4)})`
+        }
+      });
+    }
+
+    if (absX < 0 || absY < 0 || absX >= origWidth || absY >= origHeight) {
+      if (index < 3) console.log(`❌ Nokta ${index} image bounds dışında`);
+      return;
+    }
+    
+    // Brush alanı oluştur
+    for (let dy = -absBrush; dy <= absBrush; dy += gridSize) {
+      for (let dx = -absBrush; dx <= absBrush; dx += gridSize) {
         if (dx * dx + dy * dy <= absBrush * absBrush) {
-          const gx = Math.floor((absX + dx) / 2) * 2;
-          const gy = Math.floor((absY + dy) / 2) * 2;
-          const key = `${gx},${gy}`;
-          if (!grid.has(key)) {
-            grid.add(key);
-            mask.push({ x: gx, y: gy });
+          const gx = Math.floor((absX + dx) / gridSize) * gridSize;
+          const gy = Math.floor((absY + dy) / gridSize) * gridSize;
+          
+          if (gx >= 0 && gy >= 0 && gx < origWidth && gy < origHeight) {
+            const key = `${gx},${gy}`;
+            if (!grid.has(key)) {
+              grid.add(key);
+              mask.push({ x: gx, y: gy });
+            }
           }
         }
       }
     }
   });
+
+  // Final mask analizi
+  if (mask.length > 0) {
+    const bounds = {
+      minX: Math.min(...mask.map(p => p.x)),
+      maxX: Math.max(...mask.map(p => p.x)),
+      minY: Math.min(...mask.map(p => p.y)),
+      maxY: Math.max(...mask.map(p => p.y))
+    };
+    
+    console.log("🎨 Final Mask:", {
+      count: mask.length,
+      bounds: `(${bounds.minX},${bounds.minY}) → (${bounds.maxX},${bounds.maxY})`,
+      center: `(${Math.round((bounds.minX + bounds.maxX)/2)}, ${Math.round((bounds.minY + bounds.maxY)/2)})`,
+      area: `${bounds.maxX - bounds.minX}x${bounds.maxY - bounds.minY}`,
+      positionPercent: {
+        centerX: `${((bounds.minX + bounds.maxX)/2/origWidth*100).toFixed(1)}%`,
+        centerY: `${((bounds.minY + bounds.maxY)/2/origHeight*100).toFixed(1)}%`
+      }
+    });
+  }
+  
   return mask;
 }
-//31 xd
+
 const API_URL = __DEV__
   ? Platform.select({
-    ios: "http://localhost:5000",
-    android: "http://10.0.2.2:5000",
-  })
+      ios: "http://192.168.1.29:3000",
+      android: "http://10.0.2.2:3000",
+    })
   : "https://your-production-api.com";
 
+// Device bilgilerini toplayan utility fonksiyon
+const getDeviceInfo = async () => {
+  try {
+    const [
+      uniqueId,
+      deviceId,
+      deviceName,
+      brand,
+      deviceType,
+      systemName,
+      systemVersion,
+      userAgent,
+      appVersion,
+      buildNumber,
+      bundleId,
+      isEmulator,
+      isTablet,
+    ] = await Promise.all([
+      DeviceInfo.getUniqueId(),
+      DeviceInfo.getDeviceId(),
+      DeviceInfo.getDeviceName(),
+      DeviceInfo.getBrand(),
+      DeviceInfo.getDeviceType(),
+      DeviceInfo.getSystemName(),
+      DeviceInfo.getSystemVersion(),
+      DeviceInfo.getUserAgent(),
+      DeviceInfo.getVersion(),
+      DeviceInfo.getBuildNumber(),
+      DeviceInfo.getBundleId(),
+      DeviceInfo.isEmulator(),
+      DeviceInfo.isTablet(),
+    ]);
+
+    return {
+      uniqueId,
+      deviceId,
+      deviceName,
+      deviceBrand: brand,
+      deviceType,
+      systemName,
+      systemVersion,
+      userAgent,
+      appVersion,
+      buildNumber,
+      bundleId,
+      isEmulator,
+      isTablet,
+    };
+  } catch (error) {
+    console.error('Device bilgileri alınırken hata:', error);
+    return {
+      uniqueId: null,
+      deviceId: null,
+      deviceName: null,
+      deviceBrand: null,
+      deviceType: null,
+      systemName: Platform.OS,
+      systemVersion: Platform.Version?.toString(),
+      userAgent: null,
+      appVersion: null,
+      buildNumber: null,
+      bundleId: null,
+      isEmulator: false,
+      isTablet: false,
+    };
+  }
+};
+
 const PhotoEditScreen = () => {
+  const navigation = useNavigation();
   const [step, setStep] = useState(0); // 0: Fotoğraf seçme, 1: Alan Seçme, 2: Ürün seçme, 3: Bronzlaştır
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -208,7 +369,208 @@ const PhotoEditScreen = () => {
   const [brushPos, setBrushPos] = useState(null);
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
   const [resultImage, setResultImage] = useState(null);
+  const [resultImageId, setResultImageId] = useState(null); // Paylaş için gerekli
+  const [showOriginal, setShowOriginal] = useState(false); // Before/After kontrolü
   const paintedRef = useRef(new Set()); // Boyanmış grid anahtarları
+  const productAnimationValue = useRef(new Animated.Value(0)).current;
+  const originalImageOpacity = useRef(new Animated.Value(0)).current;
+  
+  // Benzer fotoğraflar için state'ler
+  const [similarPhotos, setSimilarPhotos] = useState([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
+  const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
+  const modalOpacity = useRef(new Animated.Value(0)).current;
+
+  // Bottom Tab Bar kontrolü - çizim aşamasında gizle
+  useEffect(() => {
+    if (step === 1 || step === 2) {
+      // Çizim ve ürün seçimi aşamasında tab bar'ı gizle ve status bar'ı gizle
+      navigation.setOptions({
+        tabBarStyle: { display: 'none' }
+      });
+      StatusBar.setHidden(true, 'slide');
+    } else {
+      // Diğer aşamalarda tab bar'ı göster ve status bar'ı göster
+      navigation.setOptions({
+        tabBarStyle: {
+          backgroundColor: COLORS.background,
+          backdropFilter: "blur(10px)",
+          borderTopWidth: 1,
+          borderTopColor: COLORS.text,
+          position: "absolute",
+          height: 60,
+          paddingBottom: 5,
+        }
+      });
+      StatusBar.setHidden(false, 'slide');
+    }
+  }, [step, navigation]);
+
+  // Component unmount olduğunda status bar'ı geri getir
+  useEffect(() => {
+    return () => {
+      StatusBar.setHidden(false, 'slide');
+    };
+  }, []);
+
+  // Result ekranında benzer fotoğrafları yükle
+  useEffect(() => {
+    if (step === 3 && selectedProduct?.id) {
+      fetchSimilarPhotos(selectedProduct.id, resultImageId);
+    }
+  }, [step, selectedProduct?.id, resultImageId]);
+
+  // Ürün seçimi ekranı animasyonu
+  useEffect(() => {
+    if (step === 2) {
+      Animated.timing(productAnimationValue, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      productAnimationValue.setValue(0);
+    }
+  }, [step]);
+
+  // Before/After görüntü kontrolü
+  const showOriginalImage = () => {
+    setShowOriginal(true);
+    Animated.timing(originalImageOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const hideOriginalImage = () => {
+    Animated.timing(originalImageOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowOriginal(false);
+    });
+  };
+
+  // Paylaş fonksiyonu
+  const sharePhoto = async () => {
+    if (!resultImageId) {
+      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageId: resultImageId,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        Alert.alert(
+          "Başarılı! 🎉", 
+          "Fotoğrafınız başarıyla paylaşıldı! Şimdi diğer kullanıcılar da görebilir.",
+          [
+            {
+              text: "Tamam",
+              style: "default"
+            }
+          ]
+        );
+        // Paylaş sonrası benzer fotoğrafları yenile
+        if (selectedProduct?.id) {
+          fetchSimilarPhotos(selectedProduct.id, resultImageId);
+        }
+      } else {
+        Alert.alert("Hata", result.error || "Paylaşım sırasında hata oluştu.");
+      }
+    } catch (error) {
+      console.error("Paylaş hatası:", error);
+      Alert.alert("Hata", "Paylaşım sırasında bağlantı hatası oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Benzer fotoğrafları getir
+  const fetchSimilarPhotos = async (productId, currentImageId = null) => {
+    if (!productId) return;
+    
+    setLoadingSimilar(true);
+    try {
+      const params = new URLSearchParams({
+        productId: productId.toString(),
+        limit: "10"
+      });
+      
+      if (currentImageId) {
+        params.append("currentImageId", currentImageId);
+      }
+      
+      const response = await fetch(`${API_URL}/api/public/phone/similar-photos?${params}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setSimilarPhotos(result.photos || []);
+      } else {
+        console.error("Benzer fotoğraflar alınamadı:", result.error);
+        setSimilarPhotos([]);
+      }
+    } catch (error) {
+      console.error("Benzer fotoğraflar hatası:", error);
+      setSimilarPhotos([]);
+    } finally {
+      setLoadingSimilar(false);
+    }
+  };
+
+  // Modal açma/kapama fonksiyonları
+  const openPhotoModal = (photo) => {
+    setSelectedPhotoModal(photo);
+    Animated.timing(modalOpacity, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closePhotoModal = () => {
+    Animated.timing(modalOpacity, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setSelectedPhotoModal(null);
+    });
+  };
+
+  // Hemen Satın Al fonksiyonu
+  const handlePurchase = async () => {
+    if (!selectedProduct || !selectedProduct.link) {
+      Alert.alert("Hata", "Lütfen önce bir ürün seçin!");
+      return;
+    }
+
+    try {
+      const supported = await Linking.canOpenURL(selectedProduct.link);
+      if (supported) {
+        await Linking.openURL(selectedProduct.link);
+      } else {
+        Alert.alert("Hata", "Bu link açılamıyor: " + selectedProduct.link);
+      }
+    } catch (error) {
+      console.error("Link açılırken hata:", error);
+      Alert.alert("Hata", "Satın alma sayfası açılırken hata oluştu.");
+    }
+  };
 
   // Fırça boyutunu güncelleme fonksiyonu
   const updateBrushSize = (size) => {
@@ -234,25 +596,103 @@ const PhotoEditScreen = () => {
 
   const takePhoto = async () => {
     console.log("Kamera açılıyor...");
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Hata", "Kamera erişim izni gerekiyor!");
-      return;
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      console.log("Kamera izin durumu:", status);
+      
+      if (status !== "granted") {
+        Alert.alert("Hata", "Kamera erişim izni gerekiyor!");
+        return;
+      }
+      
+      console.log("Kamera başlatılıyor...");
+              const result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [9, 16], // Modern mobil format: 9:16 (büyük görünüm)
+          quality: 1,
+        });
+      
+      console.log("Kamera sonucu:", result);
+      
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        console.log("Çekilen foto:", { width: asset.width, height: asset.height });
+        
+        // 9:16 ratio kontrolü ve zorunlu kırpma
+        const currentRatio = asset.width / asset.height;
+        const targetRatio = 9/16;
+        const ratioTolerance = 0.05;
+        
+        if (Math.abs(currentRatio - targetRatio) > ratioTolerance) {
+          console.log("⚠️ Aspect ratio uyumsuz, zorunlu kırpma uygulanıyor...");
+          
+          // 9:16 ratio için ideal boyutları hesapla
+          let newWidth, newHeight;
+          if (currentRatio > targetRatio) {
+            // Image çok geniş - genişliği kırp
+            newHeight = asset.height;
+            newWidth = Math.round(newHeight * targetRatio);
+          } else {
+            // Image çok dar - yüksekliği kırp
+            newWidth = asset.width;
+            newHeight = Math.round(newWidth / targetRatio);
+          }
+          
+          const originX = Math.round((asset.width - newWidth) / 2);
+          const originY = Math.round((asset.height - newHeight) / 2);
+          
+          console.log("🔄 Kırpma parametreleri:", {
+            original: `${asset.width}x${asset.height}`,
+            target: `${newWidth}x${newHeight}`,
+            crop: `${originX},${originY}`
+          });
+          
+          try {
+            const manipulatedImage = await ImageManipulator.manipulateAsync(
+              asset.uri,
+              [{
+                crop: {
+                  originX,
+                  originY,
+                  width: newWidth,
+                  height: newHeight
+                }
+              }],
+              { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            
+            console.log("✅ Kırpma tamamlandı:", {
+              width: manipulatedImage.width,
+              height: manipulatedImage.height,
+              ratio: (manipulatedImage.width / manipulatedImage.height).toFixed(3)
+            });
+            
+            setImage(manipulatedImage.uri);
+            setImageDimensions({ 
+              width: manipulatedImage.width, 
+              height: manipulatedImage.height 
+            });
+          } catch (error) {
+            console.error("❌ Kırpma hatası:", error);
+            Alert.alert("Hata", "Fotoğraf kırpılırken hata oluştu");
+            return;
+          }
+        } else {
+          setImage(asset.uri);
+          setImageDimensions({ width: asset.width, height: asset.height });
+        }
+        
+        setPaths([]);
+        setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
+        setSelectedProduct(null);
+        setStep(1);
+      } else {
+        console.log("Kamera kullanımı iptal edildi");
+      }
+    } catch (error) {
+      console.error("Kamera hatası:", error);
+      Alert.alert("Hata", "Kamera açılırken hata oluştu: " + error.message);
     }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      aspect: [9, 16],
-      quality: 1,
-    });
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      setImage(asset.uri);
-      setImageDimensions({ width: asset.width, height: asset.height });
-      setPaths([]);
-      setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
-      setSelectedProduct(null);
-    }
-    setStep(1);
   };
 
   const onGestureEvent = (event) => {
@@ -344,6 +784,8 @@ const PhotoEditScreen = () => {
   // Image yüklendiğinde boyutlarını al
   const onImageLoad = (event) => {
     const { width, height } = event.nativeEvent.source;
+    const ratio = width / height;
+    console.log(`📸 Image yüklendi: ${width}x${height}, ratio: ${ratio.toFixed(2)} (beklenen: 0.56)`);
     setImageDimensions({ width, height });
   };
 
@@ -360,37 +802,76 @@ const PhotoEditScreen = () => {
         width: imageDimensions.width,
         height: imageDimensions.height,
       };
-      // Eğer yeniden boyutlandırma istiyorsanız, burayı açabilirsiniz:
-      // manipMeta = await ImageManipulator.manipulateAsync(
-      //   image,
-      //   [{ resize: { width: 800 } }],
-      //   { base64: true, compress: 0.7 }
-      // );
-      // setImageDimensions({ width: manipMeta.width, height: manipMeta.height });
 
       const origWidth = manipMeta.width;
       const origHeight = manipMeta.height;
       const containerWidth = displaySize.width || origWidth;
       const containerHeight = displaySize.height || origHeight;
+      
 
-      // Her path için kendi fırça boyutuna göre mask noktalarını hesapla
-      const maskSet = new Set();
+
+      // Koordinatları normalize et (0-1 arası)
+      const normalizedMask = [];
+      
+      // Container layout bilgilerini al
+      const imageRatio = origWidth / origHeight;
+      const containerRatio = containerWidth / containerHeight;
+      
+      let scale, displayWidth, displayHeight, offsetX, offsetY;
+      if (imageRatio < containerRatio) {
+        scale = containerHeight / origHeight;
+        displayHeight = containerHeight;
+        displayWidth = origWidth * scale;
+        offsetX = (containerWidth - displayWidth) / 2;
+        offsetY = 0;
+      } else {
+        scale = containerWidth / origWidth;
+        displayWidth = containerWidth;
+        displayHeight = origHeight * scale;
+        offsetX = 0;
+        offsetY = (containerHeight - displayHeight) / 2;
+      }
+      
       paths.forEach((p) => {
-        const m = optimizeMaskPoints(
-          p.points,
-          origWidth,
-          origHeight,
-          containerWidth,
-          containerHeight,
-          p.brush
-        );
-        m.forEach((pt) => {
-          maskSet.add(`${pt.x},${pt.y}`);
+        p.points.forEach((pt) => {
+          // Screen koordinatlarını display koordinatlarına dönüştür
+          const relativeX = pt.x - offsetX;
+          const relativeY = pt.y - offsetY;
+          
+          // Normalize koordinatlar (0-1 arası)
+          const normalizedX = relativeX / displayWidth;
+          const normalizedY = relativeY / displayHeight;
+          
+          // Sadece geçerli koordinatları ekle
+          if (normalizedX >= 0 && normalizedX <= 1 && normalizedY >= 0 && normalizedY <= 1) {
+            // Brush büyüklüğünü de normalize et (image boyutuna göre)
+            const normalizedBrush = (p.brush || DEFAULT_BRUSH_RADIUS) / Math.min(displayWidth, displayHeight);
+            
+            normalizedMask.push({
+              x: normalizedX,
+              y: normalizedY,
+              brush: normalizedBrush
+            });
+          }
         });
       });
-      const mask = Array.from(maskSet).map((k) => {
-        const [x, y] = k.split(",").map(Number);
-        return { x, y };
+      
+      console.log('🎯 NORMALIZE DEBUG:', {
+        displaySize: `${displaySize.width}x${displaySize.height}`,
+        originalMaskCount: paths.reduce((sum, p) => sum + p.points.length, 0),
+        normalizedMaskCount: normalizedMask.length,
+        sampleNormalized: normalizedMask.slice(0, 3)
+      });
+      
+      const mask = normalizedMask;
+
+      // Device bilgilerini al
+      const deviceInfo = await getDeviceInfo();
+      console.log('📱 Device Info:', {
+        brand: deviceInfo.deviceBrand,
+        model: deviceInfo.deviceId,
+        os: `${deviceInfo.systemName} ${deviceInfo.systemVersion}`,
+        uniqueId: deviceInfo.uniqueId?.substring(0, 8) + '...' // Security için sadece ilk 8 karakter
       });
 
       const formData = new FormData();
@@ -401,23 +882,30 @@ const PhotoEditScreen = () => {
       });
       formData.append("mask", JSON.stringify(mask));
       formData.append("selectedProduct", JSON.stringify(selectedProduct));
+      formData.append("deviceInfo", JSON.stringify(deviceInfo));
 
-      const response = await fetch(`${API_URL}/bronze-effect`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        `${API_URL}/api/public/phone/bronze-effect`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const result = await response.json();
+      console.log(result);
       if (result.success) {
         // Görüntüyü göster
-        const imageUrl = `http://localhost:5000${result.imageUrl}`; //TODO: API_URL'ye göre değiştirilecek
+        const imageUrl = `${API_URL}${result.imageUrl}`;
         setResultImage(imageUrl);
+        setResultImageId(result.imageId); // Paylaş için imageId'yi kaydet
         setStep(3);
       } else {
         Alert.alert("Hata", "Filtrelenmiş fotoğraf alınamadı.");
       }
     } catch (e) {
       Alert.alert("Hata", "Filtre uygulanırken hata oluştu: " + e.message);
+      console.log(e);
     } finally {
       setLoading(false);
     }
@@ -464,43 +952,147 @@ const PhotoEditScreen = () => {
     const handleSelect = () => {
       setSelectedProduct(product);
     };
+
+    const isSelected = selectedProduct?.id === product.id;
+
     return (
       <TouchableOpacity
-        style={[
-          styles.productItem,
-          selectedProduct?.id === product.id && styles.selectedProductItem,
-        ]}
+        style={[styles.productItem, isSelected && styles.selectedProductItem]}
         onPress={handleSelect}
+        activeOpacity={0.8}
       >
-        <Image source={product.pngImage} style={styles.productImage} />
-        <Text style={styles.productName}>{product.name}</Text>
-        <Text style={styles.productPrice}>{product.price} TL</Text>
+        <LinearGradient
+          colors={isSelected ? ["#FFD700", "#FFA500"] : ["#FFFFFF", "#F5F5F5"]}
+          style={styles.productGradient}
+        >
+          <View style={styles.productImageContainer}>
+            <Image source={product.pngImage} style={styles.productImage} />
+            {isSelected && (
+              <View style={styles.selectedIndicator}>
+                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+              </View>
+            )}
+          </View>
+          <View style={styles.productInfo}>
+            <Text
+              style={[styles.productName, isSelected && styles.selectedText]}
+              numberOfLines={2}
+            >
+              {product.name}
+            </Text>
+            <Text
+              style={[
+                styles.productPrice,
+                isSelected && styles.selectedPriceText,
+              ]}
+            >
+              {product.price} TL
+            </Text>
+          </View>
+        </LinearGradient>
       </TouchableOpacity>
     );
   };
 
   const pickImage = async () => {
     console.log("Galeri açılıyor...");
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Hata", "Galeriye erişim izni gerekiyor!");
-      return;
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log("Galeri izin durumu:", status);
+      
+      if (status !== "granted") {
+        Alert.alert("Hata", "Galeriye erişim izni gerekiyor!");
+        return;
+      }
+      
+      console.log("ImagePicker başlatılıyor...");
+              const result = await ImagePicker.launchImageLibraryAsync({
+          allowsEditing: true,
+          aspect: [9, 16], // Modern mobil format: 9:16 (büyük görünüm)
+          quality: 1,
+        });
+      
+      console.log("ImagePicker sonucu:", result);
+      
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        console.log("Seçilen asset:", { width: asset.width, height: asset.height });
+        
+        // 9:16 ratio kontrolü ve zorunlu kırpma
+        const currentRatio = asset.width / asset.height;
+        const targetRatio = 9/16;
+        const ratioTolerance = 0.05;
+        
+        if (Math.abs(currentRatio - targetRatio) > ratioTolerance) {
+          console.log("⚠️ Aspect ratio uyumsuz, zorunlu kırpma uygulanıyor...");
+          
+          // 9:16 ratio için ideal boyutları hesapla
+          let newWidth, newHeight;
+          if (currentRatio > targetRatio) {
+            // Image çok geniş - genişliği kırp
+            newHeight = asset.height;
+            newWidth = Math.round(newHeight * targetRatio);
+          } else {
+            // Image çok dar - yüksekliği kırp
+            newWidth = asset.width;
+            newHeight = Math.round(newWidth / targetRatio);
+          }
+          
+          const originX = Math.round((asset.width - newWidth) / 2);
+          const originY = Math.round((asset.height - newHeight) / 2);
+          
+          console.log("🔄 Kırpma parametreleri:", {
+            original: `${asset.width}x${asset.height}`,
+            target: `${newWidth}x${newHeight}`,
+            crop: `${originX},${originY}`
+          });
+          
+          try {
+            const manipulatedImage = await ImageManipulator.manipulateAsync(
+              asset.uri,
+              [{
+                crop: {
+                  originX,
+                  originY,
+                  width: newWidth,
+                  height: newHeight
+                }
+              }],
+              { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            
+            console.log("✅ Kırpma tamamlandı:", {
+              width: manipulatedImage.width,
+              height: manipulatedImage.height,
+              ratio: (manipulatedImage.width / manipulatedImage.height).toFixed(3)
+            });
+            
+            setImage(manipulatedImage.uri);
+            setImageDimensions({ 
+              width: manipulatedImage.width, 
+              height: manipulatedImage.height 
+            });
+          } catch (error) {
+            console.error("❌ Kırpma hatası:", error);
+            Alert.alert("Hata", "Fotoğraf kırpılırken hata oluştu");
+            return;
+          }
+        } else {
+          setImage(asset.uri);
+          setImageDimensions({ width: asset.width, height: asset.height });
+        }
+        
+        setPaths([]);
+        setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
+        setSelectedProduct(null);
+        setStep(1);
+      } else {
+        console.log("Galeri seçimi iptal edildi");
+      }
+    } catch (error) {
+      console.error("Galeri hatası:", error);
+      Alert.alert("Hata", "Galeri açılırken hata oluştu: " + error.message);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      aspect: [9, 16],
-      quality: 1,
-    });
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      setImage(asset.uri);
-      setImageDimensions({ width: asset.width, height: asset.height });
-      setPaths([]);
-      setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
-      setSelectedProduct(null);
-    }
-    setStep(1);
   };
 
   return (
@@ -517,10 +1109,14 @@ const PhotoEditScreen = () => {
             <View style={styles.step0Container}>
               <Text style={styles.title}>Fotoğraf Seç</Text>
               <Text style={styles.desc}>
-                Bronzlaştırıcı etkileri denemek için hemen bir fotoğraf seçmen yeterli!
+                Bronzlaştırıcı etkileri denemek için hemen bir fotoğraf seçmen
+                yeterli!
               </Text>
               <View style={styles.actions}>
-                <Text style={styles.actionText}>Yüz veya vücut bölgelerine bronzlaştırıcı krem uygulamak için hemen </Text>
+                <Text style={styles.actionText}>
+                  Yüz veya vücut bölgelerine bronzlaştırıcı krem uygulamak için
+                  hemen{" "}
+                </Text>
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={takePhoto}
@@ -565,9 +1161,9 @@ const PhotoEditScreen = () => {
                   (step === 1 &&
                     paths.length > 0 &&
                     styles.floatingTopNavActive) ||
-                  (step === 2 &&
-                    selectedProduct &&
-                    styles.floatingTopNavActive),
+                    (step === 2 &&
+                      selectedProduct &&
+                      styles.floatingTopNavActive),
                 ]}
                 onPress={() => {
                   if (step === 1) {
@@ -602,12 +1198,7 @@ const PhotoEditScreen = () => {
                 ref={imageRef}
                 source={{ uri: image }}
                 style={styles.image}
-                resizeMode="cover"
-                aspectRatio={[9, 16]}
-                onLayout={(e) => {
-                  const { width, height } = e.nativeEvent.layout;
-                  setDisplaySize({ width, height });
-                }}
+                resizeMode="contain"
                 onLoad={onImageLoad}
               />
 
@@ -617,7 +1208,7 @@ const PhotoEditScreen = () => {
                     ? eraseMode
                       ? onEraseGestureEvent
                       : onGestureEvent
-                    : () => { }
+                    : () => {}
                 }
                 onHandlerStateChange={({ nativeEvent }) => {
                   const s = nativeEvent.state;
@@ -632,7 +1223,14 @@ const PhotoEditScreen = () => {
                   }
                 }}
               >
-                <Animated.View style={StyleSheet.absoluteFill}>
+                <Animated.View 
+                  style={StyleSheet.absoluteFill}
+                  onLayout={(e) => {
+                    const { width, height } = e.nativeEvent.layout;
+                    console.log("📐 Container Layout:", { width, height });
+                    setDisplaySize({ width, height });
+                  }}
+                >
                   <Svg style={StyleSheet.absoluteFill}>
                     {paths.map((p, index) => (
                       <Path
@@ -771,16 +1369,84 @@ const PhotoEditScreen = () => {
               )}
 
               {step === 2 && (
-                <View style={styles.productsContainer}>
-                  {/* Slider gibi yan yana sirali urunler gösterilecek */}
-                  <FlatList
-                    data={PRODUCTS}
-                    renderItem={({ item }) => <ProductItem product={item} />}
-                    keyExtractor={(item) => item.id.toString()}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                  />
-                </View>
+                <Animated.View
+                  style={[
+                    styles.productsOverlay,
+                    {
+                      opacity: productAnimationValue,
+                      transform: [
+                        {
+                          translateY: productAnimationValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [100, 0],
+                          }),
+                        },
+                        {
+                          scale: productAnimationValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.9, 1],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <Animated.View
+                    style={[
+                      styles.productsHeader,
+                      {
+                        opacity: productAnimationValue.interpolate({
+                          inputRange: [0, 0.5, 1],
+                          outputRange: [0, 0, 1],
+                        }),
+                        transform: [
+                          {
+                            translateY: productAnimationValue.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [20, 0],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    <Text style={styles.productsTitle}>Ürün Seçin</Text>
+                    <Text style={styles.productsSubtitle}>
+                      Bronzlaştırıcı kremlerin arasından birini seçin
+                    </Text>
+                  </Animated.View>
+                  <Animated.View
+                    style={[
+                      styles.productsScrollContainer,
+                      {
+                        opacity: productAnimationValue.interpolate({
+                          inputRange: [0, 0.3, 1],
+                          outputRange: [0, 0, 1],
+                        }),
+                        transform: [
+                          {
+                            translateY: productAnimationValue.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [30, 0],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    <FlatList
+                      data={PRODUCTS}
+                      renderItem={({ item }) => <ProductItem product={item} />}
+                      keyExtractor={(item) => item.id.toString()}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.productsListContent}
+                      ItemSeparatorComponent={() => (
+                        <View style={styles.productSeparator} />
+                      )}
+                    />
+                  </Animated.View>
+                </Animated.View>
               )}
             </View>
 
@@ -797,9 +1463,11 @@ const PhotoEditScreen = () => {
           </>
         )}
         {step === 3 && (
-          <ScrollView style={{
-            flex: 1,
-          }}>
+          <ScrollView
+            style={{
+              flex: 1,
+            }}
+          >
             <View style={styles.step1Container}>
               <TouchableOpacity
                 style={styles.floatingTopNavBack}
@@ -809,41 +1477,201 @@ const PhotoEditScreen = () => {
               >
                 <Text style={styles.floatingTopNavText}>Geri Dön</Text>
               </TouchableOpacity>
-              <Image
-                source={{ uri: resultImage }}
-                style={styles.resultImage}
-                resizeMode="cover"
-                aspectRatio={[9, 16]}
-              />
-              <View style={styles.resultButtonsContainer}>
-                <TouchableOpacity style={styles.resultButtons}>
-                  <Text>Paylaş</Text>
+              <View style={styles.resultImageContainer}>
+                {/* Filtered (Result) Image */}
+                <Image
+                  source={{ uri: resultImage }}
+                  style={styles.resultImage}
+                  resizeMode="contain"
+                />
+                
+                {/* Interactive Overlay */}
+                <TouchableOpacity
+                  style={styles.resultImageOverlay}
+                  activeOpacity={1}
+                  onPressIn={showOriginalImage}
+                  onPressOut={hideOriginalImage}
+                >
+                  {/* Original Image Overlay */}
+                  {showOriginal && (
+                    <Animated.View 
+                      style={[
+                        styles.originalImageOverlay,
+                        { opacity: originalImageOpacity }
+                      ]}
+                    >
+                      <Image
+                        source={{ uri: image }}
+                        style={styles.resultImage}
+                        resizeMode="contain"
+                      />
+                      <View style={styles.originalImageLabel}>
+                        <Text style={styles.originalImageLabelText}>ORİJİNAL</Text>
+                      </View>
+                    </Animated.View>
+                  )}
+                  
+                  {/* Touch Instructions */}
+                  <View style={styles.touchInstructions}>
+                    <Ionicons name="hand-left" size={20} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.touchInstructionsText}>
+                      Basılı tutarak orijinali gör
+                    </Text>
+                  </View>
                 </TouchableOpacity>
-                <Text style={{
-                  textAlign: "center",
-                  fontSize: 12,
-                  color: COLORS.text,
-                }}>
+              </View>
+              <View style={styles.resultButtonsContainer}>
+                <TouchableOpacity 
+                  style={[styles.resultButtons, styles.shareButton]}
+                  onPress={sharePhoto}
+                  disabled={loading}
+                >
+                  <Ionicons name="share-social" size={20} color={COLORS.text} />
+                  <Text style={styles.buttonText}>
+                    {loading ? "Paylaşılıyor..." : "Paylaş"}
+                  </Text>
+                </TouchableOpacity>
+                <Text
+                  style={{
+                    textAlign: "center",
+                    fontSize: 12,
+                    color: COLORS.text,
+                  }}
+                >
                   {`Fotoğrafınızı paylaşın ve sizin için özel oluşturulan indirim kodunu kaçırmayın!`}
                 </Text>
-                <TouchableOpacity style={styles.resultButtons}>
+                <TouchableOpacity style={styles.resultButtons} onPress={handlePurchase}>
                   <Text>Hemen Satın Al</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={{
-                textAlign: "center",
-                fontSize: 12,
-                color: COLORS.text,
-              }}>Ayrıca diğer kullanıcıların deneyimlerini de görebilirsiniz</Text>
+              {/* Benzer Fotoğraflar Bölümü */}
+              <View style={styles.similarPhotosSection}>
+                <View style={styles.similarPhotosHeader}>
+                  <Text style={styles.similarPhotosTitle}>
+                    {selectedProduct?.name} ile Yapılan Diğer Çalışmalar
+                  </Text>
+                  <Text style={styles.similarPhotosSubtitle}>
+                    Aynı ürünü kullanan diğer kullanıcıların sonuçlarını keşfet
+                  </Text>
+                </View>
 
-              <View style={styles.resultSuggestions}>
-                <View style={styles.resultSuggestionItem}></View>
-                <View style={styles.resultSuggestionItem}></View>
-                <View style={styles.resultSuggestionItem}></View>
-                <View style={styles.resultSuggestionItem}></View>
+                {loadingSimilar ? (
+                  <View style={styles.similarPhotosLoading}>
+                    <ActivityIndicator size="large" color={COLORS.active} />
+                    <Text style={styles.loadingText}>Benzer çalışmalar yükleniyor...</Text>
+                  </View>
+                ) : similarPhotos.length > 0 ? (
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.similarPhotosScrollContent}
+                    style={styles.similarPhotosScroll}
+                  >
+                    {similarPhotos.map((photo, index) => (
+                      <TouchableOpacity
+                        key={photo.id}
+                        style={styles.similarPhotoItem}
+                        onPress={() => openPhotoModal(photo)}
+                        activeOpacity={0.8}
+                      >
+                        <Image
+                          source={{ uri: `${API_URL}${photo.url}` }}
+                          style={styles.similarPhotoImage}
+                          resizeMode="cover"
+                        />
+                        <LinearGradient
+                          colors={['transparent', 'rgba(0,0,0,0.6)']}
+                          style={styles.similarPhotoGradient}
+                        >
+                          <View style={styles.similarPhotoInfo}>
+                            <View style={styles.deviceBadge}>
+                              <Ionicons 
+                                name={photo.device === 'iPhone' ? 'phone-portrait' : 'phone-portrait-outline'} 
+                                size={10} 
+                                color="#FFFFFF" 
+                              />
+                              <Text style={styles.deviceText}>{photo.device}</Text>
+                            </View>
+                          </View>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.noSimilarPhotos}>
+                    <Ionicons name="camera-outline" size={48} color={COLORS.text} />
+                    <Text style={styles.noSimilarPhotosTitle}>Henüz paylaşım yok</Text>
+                    <Text style={styles.noSimilarPhotosDesc}>
+                      Bu ürünle yapılan ilk paylaşım olacaksın!
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </ScrollView>
+        )}
+
+        {/* Fotoğraf Büyük Görünüm Modal'ı */}
+        {selectedPhotoModal && (
+          <Modal transparent visible animationType="none">
+            <Animated.View 
+              style={[
+                styles.photoModal,
+                { opacity: modalOpacity }
+              ]}
+            >
+              <TouchableOpacity 
+                style={styles.modalBackdrop}
+                onPress={closePhotoModal}
+                activeOpacity={1}
+              >
+                <View style={styles.modalContent}>
+                  <TouchableOpacity 
+                    style={styles.modalCloseButton}
+                    onPress={closePhotoModal}
+                  >
+                    <Ionicons name="close" size={28} color="#FFFFFF" />
+                  </TouchableOpacity>
+                  
+                  <Image
+                    source={{ uri: `${API_URL}${selectedPhotoModal.url}` }}
+                    style={styles.modalImage}
+                    resizeMode="contain"
+                  />
+                  
+                  <View style={styles.modalPhotoInfo}>
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0,0,0,0.8)']}
+                      style={styles.modalInfoGradient}
+                    >
+                      <Text style={styles.modalProductName}>
+                        {selectedPhotoModal.productName}
+                      </Text>
+                      <View style={styles.modalMetaInfo}>
+                        <View style={styles.modalDeviceBadge}>
+                          <Ionicons 
+                            name={selectedPhotoModal.device === 'iPhone' ? 'phone-portrait' : 'phone-portrait-outline'} 
+                            size={14} 
+                            color="#FFFFFF" 
+                          />
+                          <Text style={styles.modalDeviceText}>
+                            {selectedPhotoModal.device}
+                          </Text>
+                        </View>
+                        <Text style={styles.modalDate}>
+                          {new Date(selectedPhotoModal.createdAt).toLocaleDateString('tr-TR', {
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric'
+                          })}
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+          </Modal>
         )}
       </LinearGradient>
     </ImageBackground>
@@ -901,6 +1729,8 @@ const styles = StyleSheet.create({
   step1Container: {
     position: "relative",
     flex: 1,
+    justifyContent: "center",
+    // alignItems: "center",
   },
   floatingTopNavBack: {
     position: "absolute",
@@ -911,7 +1741,6 @@ const styles = StyleSheet.create({
     gap: 5,
     height: 30,
     zIndex: 1000,
-    textAlign: "center",
     justifyContent: "center",
     backgroundColor: COLORS.button,
     borderRadius: 20,
@@ -943,6 +1772,11 @@ const styles = StyleSheet.create({
   },
   floatingTopNavText: {
     color: COLORS.text,
+    display:'flex',
+    justifyContent:'center',
+    alignItems:'center',
+    textAlign:'center',
+
   },
   imageContainer: {
     flex: 1,
@@ -951,6 +1785,9 @@ const styles = StyleSheet.create({
   },
   image: {
     flex: 1,
+    aspectRatio: 9/16, // Modern mobil format: 9:16 (büyük görünüm)
+    width: '100%',
+    maxHeight: '100%',
   },
   floatingButtonContainer: {
     position: "absolute",
@@ -980,51 +1817,76 @@ const styles = StyleSheet.create({
     borderColor: COLORS.background,
     color: COLORS.background,
   },
-  productsContainer: {
-    position: "absolute",
-    top: "70%",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "transparent",
-    flexDirection: "row",
-    width: "100%",
-    gap: 10,
-    paddingHorizontal: 10,
-  },
   productItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    width: 150,
-    height: 200,
-    marginRight: 10,
-    gap: 2,
-    borderWidth: 1,
-    borderColor: COLORS.text,
-    borderRadius: 10,
-    padding: 5,
-    backgroundColor: COLORS.background,
+    width: 140,
+    height: 180,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginVertical: 10,
   },
   selectedProductItem: {
-    backgroundColor: COLORS.active,
-    borderRadius: 10,
+    transform: [{ scale: 1.05 }],
   },
   productImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "contain",
+  },
+  productName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.text,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  productPrice: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: COLORS.active,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  productGradient: {
+    flex: 1,
+    borderRadius: 10,
+    padding: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  productImageContainer: {
     width: 100,
     height: 100,
     borderRadius: 10,
-    objectFit: "contain",
+    position: "relative",
+    overflow: "hidden",
   },
-  productName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: COLORS.text,
-    textAlign: "center",
+  selectedIndicator: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    backgroundColor: COLORS.active,
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: COLORS.background,
   },
-  productPrice: {
-    fontSize: 14,
-    color: COLORS.text,
+  productInfo: {
+    marginTop: 5,
+    alignItems: "center",
+  },
+  selectedText: {
+    color: COLORS.active,
+  },
+  selectedPriceText: {
+    color: COLORS.active,
   },
 
   loadingOverlay: {
@@ -1042,11 +1904,67 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
+  resultImageContainer: {
+    position: 'relative',
+    width: "100%",
+    height: 500,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
   resultImage: {
     width: "100%",
-    height:500,
+    height: 500,
     borderRadius: 10,
     objectFit: "contain",
+  },
+  resultImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  originalImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  originalImageLabel: {
+    position: 'absolute',
+    top: 20,
+    left: '40%',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  originalImageLabelText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+  touchInstructions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  touchInstructionsText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 14,
+    fontWeight: '500',
   },
   resultButtonsContainer: {
     gap: 3,
@@ -1054,36 +1972,256 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     textAlign: "center",
     width: "100%",
-    padding: 10
+    padding: 10,
   },
   resultButtons: {
     backgroundColor: COLORS.button,
     padding: 10,
     borderRadius: 10,
-    width: "100",
     width: "100%",
     height: 50,
     justifyContent: "center",
     alignItems: "center",
-  },
-  resultSuggestions: {
-    display: "flex",
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 10,
+    gap: 8,
   },
-  resultSuggestionItem: {
-    width: 150,
-    height: 150,
-    backgroundColor: COLORS.button,
-    borderRadius: 10,
-  }
-});
+  shareButton: {
+    backgroundColor: "#4CAF50", // Yeşil paylaş butonu
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  buttonText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  // Benzer Fotoğraflar Bölümü Stilleri
+  similarPhotosSection: {
+    marginTop: 20,
+    paddingHorizontal: 20,
+  },
+  similarPhotosHeader: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  similarPhotosTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  similarPhotosSubtitle: {
+    fontSize: 16,
+    color: COLORS.text,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  similarPhotosLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  similarPhotosScroll: {
+    marginHorizontal: -10,
+  },
+  similarPhotosScrollContent: {
+    paddingHorizontal: 10,
+  },
+  similarPhotoItem: {
+    width: 140,
+    height: 180,
+    marginHorizontal: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  similarPhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  similarPhotoGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    justifyContent: 'flex-end',
+    padding: 12,
+  },
+  similarPhotoInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  deviceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  deviceText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  noSimilarPhotos: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    opacity: 0.6,
+  },
+  noSimilarPhotosTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noSimilarPhotosDesc: {
+    fontSize: 14,
+    color: COLORS.text,
+    textAlign: 'center',
+    opacity: 0.7,
+    lineHeight: 20,
+  },
 
+  // Modal Stilleri
+  photoModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBackdrop: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    height: '80%',
+    position: 'relative',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: -50,
+    right: 10,
+    zIndex: 1000,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  modalPhotoInfo: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+  },
+  modalInfoGradient: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 20,
+  },
+  modalProductName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  modalMetaInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalDeviceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  modalDeviceText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalDate: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  productsOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(244, 235, 208, 0.95)",
+    backdropFilter: "blur(10px)",
+    zIndex: 100,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productsHeader: {
+    alignItems: "center",
+    marginBottom: 30,
+    paddingHorizontal: 20,
+  },
+  productsTitle: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: COLORS.text,
+    marginBottom: 8,
+    textShadowColor: "rgba(0,0,0,0.1)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  productsSubtitle: {
+    fontSize: 18,
+    color: COLORS.text,
+    textAlign: "center",
+    opacity: 0.8,
+    fontWeight: "500",
+  },
+  productsScrollContainer: {
+    width: "100%",
+    maxHeight: 220,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    paddingVertical: 10,
+  },
+  productsListContent: {
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  productSeparator: {
+    width: 15,
+  },
+});
 
 export default PhotoEditScreen;

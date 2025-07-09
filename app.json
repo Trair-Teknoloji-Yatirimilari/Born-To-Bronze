@@ -41,6 +41,17 @@
     },
     "plugins": [
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          },
+          "ios": {
+            "deploymentTarget": "15.5"
+          }
+        }
+      ],
+      [
         "react-native-vision-camera",
         {
           "cameraPermissionText": "Bronze Cream uygulamasının kameranıza erişmesine izin verin"
