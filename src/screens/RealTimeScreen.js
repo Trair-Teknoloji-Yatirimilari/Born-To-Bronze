@@ -1,337 +1,364 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  Dimensions,
-  Linking,
   StyleSheet,
   Text,
-  useColorScheme,
+  Button,
   View,
+  useWindowDimensions,
 } from "react-native";
 import {
-  Camera,
-  CameraPosition,
+  DrawableFrame,
+  Frame,
+  Camera as VisionCamera,
   useCameraDevice,
-  useCameraFormat,
   useCameraPermission,
-  useSkiaFrameProcessor,
+  useCameraFormat,
 } from "react-native-vision-camera";
-import {
-  Contours,
-  useFaceDetector,
-} from "react-native-vision-camera-face-detector";
+import { useIsFocused } from "@react-navigation/core";
+import { useAppState } from "@react-native-community/hooks";
+import { Camera, Face } from "react-native-vision-camera-face-detector";
 import { ClipOp, Skia, TileMode } from "@shopify/react-native-skia";
-import { useRef } from "react";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
-const RealTimeScreen = () => {
+/**
+ * Face detection component
+ *
+ * @return {JSX.Element} Component
+ */
+function RealTimeScreen() {
+  const { width, height } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
-  const [position, setPosition] = useState("front");
-  const [isCameraActive, setIsCameraActive] = useState(true);
-  
-  const device = useCameraDevice(position);
-  const format = device
-    ? useCameraFormat(device, [
-        {
-          videoResolution: {
-            width: 800,
-            height: 600,
-          }
-        },
-        {
-          fps: 15,
-        },
-      ])
-    : undefined;
+  const [cameraMounted, setCameraMounted] = useState(true);
+  const [cameraPaused, setCameraPaused] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState("front");
+  const faceDetectionOptions = useRef({
+    performanceMode: "fast",
+    classificationMode: "all",
+    contourMode: "all",
+    landmarkMode: "all",
+    windowWidth: width,
+    windowHeight: height,
+  }).current;
+  const isFocused = useIsFocused();
+  const appState = useAppState();
+  const isCameraActive = !cameraPaused && isFocused && appState === "active";
+  const cameraDevice = useCameraDevice(cameraFacing);
+  const format = cameraDevice
+  ? useCameraFormat(cameraDevice, [
+      {
+        videoResolution: {
+          width: 1280,
+          height: 720,
+        }
+      },
+      {
+        fps: 15,
+      },
+    ])
+  : undefined;
+  //
+  // vision camera ref
+  const camera = useRef(null);
+  //
+  // face rectangle position
+  //
+  const aFaceW = useSharedValue(0);
+  const aFaceH = useSharedValue(0);
+  const aFaceX = useSharedValue(0);
+  const aFaceY = useSharedValue(0);
+  const aRot = useSharedValue(0);
+  const boundingBoxStyle = useAnimatedStyle(() => ({
+    position: "absolute",
+    borderWidth: 4,
+    borderLeftColor:   [149.69, -73.66, -131.32],
+    borderRightColor:  [149.69, -73.66, -131.32],
+    borderBottomColor: [149.69, -73.66, -131.32],
+    borderTopColor:    [76.25, -37.52, 156.83],
+    width: withTiming(aFaceW.value, {
+      duration: 100,
+    }),
+    height: withTiming(aFaceH.value, {
+      duration: 100,
+    }),
+    left: withTiming(aFaceX.value, {
+      duration: 100,
+    }),
+    top: withTiming(aFaceY.value, {
+      duration: 100,
+    }),
+    transform: [
+      {
+        rotate: `${aRot.value}deg`,
+      },
+    ],
+  }));
 
   useEffect(() => {
-    if (!hasPermission) {
-      requestPermission();
-    }
-  }, [hasPermission, requestPermission]);
+    if (hasPermission) return;
+    requestPermission();
+  }, []);
 
-  const faceDetector = useFaceDetector({
-    performanceMode: "fast",
-    contourMode: "all",
-    landmarkMode: "none",
-    classificationMode: "none",
-  });
+  /**
+   * Handle camera UI rotation
+   *
+   * @param {number} rotation Camera rotation
+   */
+  function handleUiRotation(rotation) {
+    aRot.value = rotation;
+  }
 
-  console.log('Face detector loaded:', !!faceDetector);
+  /**
+   * Hanldes camera mount error event
+   *
+   * @param {any} error Error event
+   */
+  function handleCameraMountError(error) {
+    console.error("camera mount error", error);
+  }
 
-  const blurRadius = 20;
-  const blurFilter = Skia.ImageFilter.MakeBlur(
-    blurRadius,
-    blurRadius,
-    TileMode.Repeat,
-    null
-  );
-  const paint = Skia.Paint();
-  paint.setImageFilter(blurFilter);
-
-
-
-  const frameProcessor = useSkiaFrameProcessor((frame) => {
-    'worklet';
-    frame.render();
-
-    if (!faceDetector || !faceDetector.detectFaces) {
-      console.log('Face detector not available');
+  /**
+   * Handle detection result
+   *
+   * @param {Face[]} faces Detection result
+   * @param {Frame} frame Current frame
+   * @returns {void}
+   */
+  function handleFacesDetected(faces, frame) {
+    // if no faces are detected we do nothing
+    if (faces.length <= 0) {
+      aFaceW.value = 0;
+      aFaceH.value = 0;
+      aFaceX.value = 0;
+      aFaceY.value = 0;
       return;
     }
 
-    try {
-      const result = faceDetector.detectFaces(frame);
-      
-      // Result direkt array olabilir, object değil
-      const faces = Array.isArray(result) ? result : (result?.faces || []);
+    console.log(
+      "faces",
+      faces.length,
+      "frame",
+      frame.toString(),
+      "faces",
+      JSON.stringify(faces)
+    );
 
+    const { bounds } = faces[0];
+    const { width, height, x, y } = bounds;
+    aFaceW.value = width;
+    aFaceH.value = height;
+    aFaceX.value = x;
+    aFaceY.value = y;
 
-      for (const face of faces) {
-        
-        if (face.contours != null) {
-          try {
-            const facePoints = face.contours['FACE'] || [];
-            
-            // Gözlerin konumunu al
-            let leftEyeY = null;
-            let rightEyeY = null;
-            
-            if (face.contours['LEFT_EYE'] && face.contours['LEFT_EYE'].length > 0) {
-              leftEyeY = face.contours['LEFT_EYE'][0].y;
-            }
-            if (face.contours['RIGHT_EYE'] && face.contours['RIGHT_EYE'].length > 0) {
-              rightEyeY = face.contours['RIGHT_EYE'][0].y;
-            }
-            
-            const eyeY = leftEyeY && rightEyeY ? Math.min(leftEyeY, rightEyeY) : null;
-            
-            // Alın bölgesini blur yap (sadece gözlerin üstü)
-            if (facePoints.length > 10 && eyeY) {
-              const foreheadPath = Skia.Path.Make();
+    // only call camera methods if ref is defined
+    if (camera.current) {
+      // take photo, capture video, etc...
+    }
+  }
 
-              // Sadece gözlerin üstündeki noktaları al
-              const foreheadPoints = facePoints.filter(point => point.y < eyeY - 20);
-              
-              if (foreheadPoints.length > 2) {
-                // Yüzün kenar noktalarını da ekle
-                const leftEdge = facePoints.slice(0, 3);
-                const rightEdge = facePoints.slice(-3);
-                
-                const allForeheadPoints = [...leftEdge, ...foreheadPoints, ...rightEdge];
-                
-                allForeheadPoints.forEach((point, index) => {
-                  if (index === 0) {
-                    foreheadPath.moveTo(point.x, point.y);
-                  } else {
-                    foreheadPath.lineTo(point.x, point.y);
-                  }
-                });
-                foreheadPath.close();
-                
-                frame.save();
-                frame.clipPath(foreheadPath, ClipOp.Intersect, true);
-                frame.render(paint);
-                frame.restore();
-              }
-            }
-            
-            // Çene bölgesini blur yap (dudakların altı)
-            let lowerLipY = null;
-            if (face.contours['LOWER_LIP_BOTTOM'] && face.contours['LOWER_LIP_BOTTOM'].length > 0) {
-              lowerLipY = Math.max(...face.contours['LOWER_LIP_BOTTOM'].map(p => p.y));
-            }
-            
-            if (facePoints.length > 10 && lowerLipY) {
-              const chinPath = Skia.Path.Make();
-              
-              // Sadece dudakların altındaki noktaları al
-              const chinPoints = facePoints.filter(point => point.y > lowerLipY + 10);
-              
-              if (chinPoints.length > 2) {
-                chinPoints.forEach((point, index) => {
-                  if (index === 0) {
-                    chinPath.moveTo(point.x, point.y);
-                  } else {
-                    chinPath.lineTo(point.x, point.y);
-                  }
-                });
-                chinPath.close();
-                
-                frame.save();
-                frame.clipPath(chinPath, ClipOp.Intersect, true);
-                frame.render(paint);
-                frame.restore();
-              }
-            }
-            
-            // Yanak bölgelerini blur yap (gözler ve dudakların yanında)
-            if (eyeY && lowerLipY) {
-              // Sol yanak
-              const leftCheekPath = Skia.Path.Make();
-              const leftCheekPoints = facePoints.filter(point => 
-                point.x < face.bounds.x + face.bounds.width * 0.3 && 
-                point.y > eyeY + 10 && 
-                point.y < lowerLipY - 10
-              );
-              
-              if (leftCheekPoints.length > 2) {
-                leftCheekPoints.forEach((point, index) => {
-                  if (index === 0) {
-                    leftCheekPath.moveTo(point.x, point.y);
-                  } else {
-                    leftCheekPath.lineTo(point.x, point.y);
-                  }
-                });
-                leftCheekPath.close();
-                
-                frame.save();
-                frame.clipPath(leftCheekPath, ClipOp.Intersect, true);
-                frame.render(paint);
-                frame.restore();
-              }
-              
-              // Sağ yanak
-              const rightCheekPath = Skia.Path.Make();
-              const rightCheekPoints = facePoints.filter(point => 
-                point.x > face.bounds.x + face.bounds.width * 0.7 && 
-                point.y > eyeY + 10 && 
-                point.y < lowerLipY - 10
-              );
-              
-              if (rightCheekPoints.length > 2) {
-                rightCheekPoints.forEach((point, index) => {
-                  if (index === 0) {
-                    rightCheekPath.moveTo(point.x, point.y);
-                  } else {
-                    rightCheekPath.lineTo(point.x, point.y);
-                  }
-                });
-                rightCheekPath.close();
-                
-                frame.save();
-                frame.clipPath(rightCheekPath, ClipOp.Intersect, true);
-                frame.render(paint);
-                frame.restore();
-              }
-            }
-            
-          } catch (error) {
-            console.log('Bölgesel blur hatası:', error);
-            // Hata durumunda basit blur kullan
-            const path = Skia.Path.Make();
-            const rect = Skia.XYWHRect(
-              face.bounds.x,
-              face.bounds.y,
-              face.bounds.width,
-              face.bounds.height,
-            );
-            path.addOval(rect);
+  /**
+   * Handle skia frame actions
+   *
+   * @param {Face[]} faces Detection result
+   * @param {DrawableFrame} frame Current frame
+   * @returns {void}
+   */
+  function handleSkiaActions(faces, frame) {
+    "worklet";
+    // if no faces are detected we do nothing
+    if (faces.length <= 0) return;
 
-            frame.save();
-            frame.clipPath(path, ClipOp.Intersect, true);
-            frame.render(paint);
-            frame.restore();
-          }
-          
+    console.log("SKIA - faces", faces.length, "frame", frame.toString());
+
+    const { bounds, contours, landmarks } = faces[0];
+
+    // draw a blur shape around the face points
+    const blurRadius = 25;
+    const blurFilter = Skia.ImageFilter.MakeBlur(
+      blurRadius,
+      blurRadius,
+      TileMode.Repeat,
+      null
+    );
+    const blurPaint = Skia.Paint();
+    blurPaint.setImageFilter(blurFilter);
+    const contourPath = Skia.Path.Make();
+    const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
+
+    necessaryContours.map((key) => {
+      contours?.[key]?.map((point, index) => {
+        if (index === 0) {
+          // it's a starting point
+          contourPath.moveTo(point.x, point.y);
         } else {
-          // Eğer kontur yoksa basit yüz blur'u
-          const path = Skia.Path.Make();
-          const rect = Skia.XYWHRect(
-            face.bounds.x,
-            face.bounds.y,
-            face.bounds.width,
-            face.bounds.height,
-          );
-          path.addOval(rect);
-
-          frame.save();
-          frame.clipPath(path, ClipOp.Intersect, true);
-          frame.render(paint);
-          frame.restore();
+          // it's a continuation
+          contourPath.lineTo(point.x, point.y);
         }
+      });
+      contourPath.close();
+    });
+
+    frame.save();
+    frame.clipPath(contourPath, ClipOp.Intersect, true);
+    frame.render(blurPaint);
+    frame.restore();
+
+    // draw mouth shape
+    const mouthPath = Skia.Path.Make();
+    const mouthPaint = Skia.Paint();
+    mouthPaint.setColor(Skia.Color("red"));
+    const necessaryLandmarks = ["MOUTH_BOTTOM", "MOUTH_LEFT", "MOUTH_RIGHT"];
+
+    necessaryLandmarks.map((key, index) => {
+      const point = landmarks?.[key];
+      if (!point) return;
+
+      if (index === 0) {
+        // it's a starting point
+        mouthPath.moveTo(point.x, point.y);
+      } else {
+        // it's a continuation
+        mouthPath.lineTo(point.x, point.y);
       }
-    } catch (error) {
-      console.log('Face detection error:', error);
-      return;
-    }
-  }, [faceDetector, paint]);
+    });
+    mouthPath.close();
+    frame.drawPath(mouthPath, mouthPaint);
 
-  const flipCamera = useCallback(() => {
-    setPosition((pos) => (pos === "front" ? "back" : "front"));
-  }, []);
-
-  const handleCameraMountError = useCallback((error) => {
-    console.error('Camera mount error:', error);
-  }, []);
-
-  const cameraDevice = useCameraDevice(position);
-  const camera = useRef(null);
+    // draw a rectangle around the face
+    const rectPaint = Skia.Paint();
+    rectPaint.setColor(Skia.Color("blue"));
+    rectPaint.setStyle(1);
+    rectPaint.setStrokeWidth(5);
+    frame.drawRect(bounds, rectPaint);
+  }
 
   return (
-    <View style={styles.container} onTouchEnd={flipCamera}>
-      {hasPermission ? (
-        device != null ? (
-          format != null ? (
-            <Camera
-              style={StyleSheet.absoluteFill}
-              device={device}
-              isActive={isCameraActive}
-              format={format}
-              frameProcessor={frameProcessor}
-              fps={format?.maxFps}
-              pixelFormat="rgb"
-              exposure={0}
-              ref={camera}
-              onError={handleCameraMountError}
-            />
-          ) : (
-            <View style={styles.textContainer}>
-              <Text style={styles.text}>
-                Your phone does not have a {position} Camera.
-              </Text>
-            </View>
-          )
-        ) : (
-          <View style={styles.textContainer}>
-            <Text style={styles.text}>
-              Your phone does not have a {position} Camera.
-            </Text>
-          </View>
-        )
-      ) : (
-        <View style={styles.textContainer}>
-          <Text style={styles.text} numberOfLines={5}>
-            FaceBlurApp needs Camera permission.{" "}
-            <Text style={styles.link} onPress={Linking.openSettings}>
-              Grant
-            </Text>
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-};
+    <>
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            alignItems: "center",
+            justifyContent: "center",
+          },
+        ]}
+      >
+        {hasPermission && cameraDevice ? (
+          <>
+            {cameraMounted && (
+              <>
+                <Camera
+                  // @ts-ignore
+                  ref={camera}
+                  style={StyleSheet.absoluteFill}
+                  isActive={isCameraActive}
+                  device={cameraDevice}
+                  onError={handleCameraMountError}
+                  faceDetectionCallback={handleFacesDetected}
+                  onUIRotationChanged={handleUiRotation}
+                  skiaActions={handleSkiaActions}
+                  faceDetectionOptions={{
+                    ...faceDetectionOptions,
+                    cameraFacing,
+                  }}
+                  format={format}
+                />
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  camera: {
-    flex: 1,
-  },
-  textContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  text: {
-    maxWidth: "60%",
-    fontWeight: "bold",
-    fontSize: 15,
-    color: "black",
-  },
-  link: {
-    color: "rgb(80, 80, 255)",
-  },
-});
+                <Animated.View style={boundingBoxStyle} />
+
+                {cameraPaused && (
+                  <Text
+                    style={{
+                      width: "100%",
+                      backgroundColor: "rgb(0,0,255)",
+                      textAlign: "center",
+                      color: "white",
+                    }}
+                  >
+                    Camera is PAUSED
+                  </Text>
+                )}
+              </>
+            )}
+
+            {!cameraMounted && (
+              <Text
+                style={{
+                  width: "100%",
+                  backgroundColor: "rgb(255,255,0)",
+                  textAlign: "center",
+                }}
+              >
+                Camera is NOT mounted
+              </Text>
+            )}
+          </>
+        ) : (
+          <Text
+            style={{
+              width: "100%",
+              backgroundColor: "rgb(255,0,0)",
+              textAlign: "center",
+              color: "white",
+            }}
+          >
+            No camera device or permission
+          </Text>
+        )}
+      </View>
+
+      <View
+        style={{
+          position: "absolute",
+          bottom: 20,
+          left: 0,
+          right: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <View
+          style={{
+            width: "100%",
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-around",
+          }}
+        >
+          <Button
+            onPress={() =>
+              setCameraFacing((current) =>
+                current === "front" ? "back" : "front"
+              )
+            }
+            title={"Toggle Cam"}
+          />
+
+        </View>
+        <View
+          style={{
+            width: "100%",
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-around",
+          }}
+        >
+          <Button
+            onPress={() => setCameraPaused((current) => !current)}
+            title={`${cameraPaused ? "Resume" : "Pause"} Cam`}
+          />
+
+          <Button
+            onPress={() => setCameraMounted((current) => !current)}
+            title={`${cameraMounted ? "Unmount" : "Mount"} Cam`}
+          />
+        </View>
+      </View>
+    </>
+  );
+}
 
 export default RealTimeScreen;
