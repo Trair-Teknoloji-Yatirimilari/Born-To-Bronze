@@ -19,7 +19,8 @@ import { useIsFocused } from "@react-navigation/core";
 import { useAppState } from "@react-native-community/hooks";
 import { Camera, Face } from "react-native-vision-camera-face-detector";
 import { ClipOp, Skia, TileMode, BlendMode } from "@shopify/react-native-skia";
-import { PRODUCTS } from "../constants/products";
+
+
 
 function RealTimeScreen() {
   const { width, height } = useWindowDimensions();
@@ -27,7 +28,9 @@ function RealTimeScreen() {
   const [cameraMounted, setCameraMounted] = useState(true);
   const [cameraPaused, setCameraPaused] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("front");
-  const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0]); // Varsayılan ürün
+  const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0]);
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const flatListRef = useRef(null);
   const faceDetectionOptions = useRef({
     performanceMode: "fast",
     classificationMode: "all",
@@ -47,20 +50,17 @@ function RealTimeScreen() {
     },
   ]);
   const camera = useRef(null);
-  const flatListRef = useRef(null);
+
   useEffect(() => {
     if (!hasPermission) requestPermission();
   }, [hasPermission]);
 
   useEffect(() => {
-    // Seçili ürün değiştiğinde FlatList'i ortala
     const index = PRODUCTS.findIndex((p) => p.id === selectedProduct.id);
     flatListRef.current?.scrollToIndex({ index, animated: true });
   }, [selectedProduct]);
 
-  function handleUiRotation(rotation) {
-    // Kamera rotasyonu için
-  }
+  function handleUiRotation(rotation) {}
 
   function handleCameraMountError(error) {
     console.error("camera mount error", error);
@@ -68,7 +68,6 @@ function RealTimeScreen() {
 
   function handleFacesDetected(faces, frame) {
     if (faces.length <= 0) return;
-    // Yüz tespiti verileri sadece filtre için kullanılıyor
   }
 
   function handleSkiaActions(faces, frame) {
@@ -77,18 +76,49 @@ function RealTimeScreen() {
 
     const { contours } = faces[0];
 
+    // Hata ayıklama için konturları logla
+    console.log("Contours available:", Object.keys(contours || {}));
+
     // Yüz konturu oluştur
     const facePath = Skia.Path.Make();
     const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
     necessaryContours.forEach((key) => {
-      contours?.[key]?.forEach((point, index) => {
-        if (index === 0) {
-          facePath.moveTo(point.x, point.y);
-        } else {
-          facePath.lineTo(point.x, point.y);
-        }
-      });
-      facePath.close();
+      if (contours?.[key]) {
+        contours[key].forEach((point, index) => {
+          if (index === 0) {
+            facePath.moveTo(point.x, point.y);
+          } else {
+            facePath.lineTo(point.x, point.y);
+          }
+        });
+        facePath.close();
+      }
+    });
+
+    // Gözler ve dudaklar için hariç tutma bölgeleri
+    const excludePath = Skia.Path.Make();
+    const excludeContours = [
+      "LEFT_EYE",
+      "RIGHT_EYE",
+      "UPPER_LIP_TOP",
+      "UPPER_LIP_BOTTOM",
+      "LOWER_LIP_TOP",
+      "LOWER_LIP_BOTTOM",
+    ];
+    excludeContours.forEach((key) => {
+      if (contours?.[key]) {
+        console.log(`Processing contour: ${key}`, contours[key].length);
+        contours[key].forEach((point, index) => {
+          if (index === 0) {
+            excludePath.moveTo(point.x, point.y);
+          } else {
+            excludePath.lineTo(point.x, point.y);
+          }
+        });
+        excludePath.close();
+      } else {
+        console.log(`Contour ${key} not found`);
+      }
     });
 
     // Seçili ürünün rengine göre bronzlaştırma filtresi
@@ -97,10 +127,10 @@ function RealTimeScreen() {
     const g = parseInt(color.slice(3, 5), 16) / 255;
     const b = parseInt(color.slice(5, 7), 16) / 255;
     const colorMatrix = [
-      1, 0, 0, 0, r * 0.2,
-      0, 1, 0, 0, g * 0.1,
-      0, 0, 1, 0, b * 0.05,
-      0, 0, 0, 0.5, 0,
+      1, 0, 0, 0, r * 0.15,
+      0, 1, 0, 0, g * 0.08,
+      0, 0, 1, 0, b * 0.03,
+      0, 0, 0, 0.6, 0,
     ];
     const bronzeFilter = Skia.ColorFilter.MakeMatrix(colorMatrix);
     const bronzePaint = Skia.Paint();
@@ -108,18 +138,19 @@ function RealTimeScreen() {
     bronzePaint.setBlendMode(BlendMode.Overlay);
 
     // Kenarları yumuşatmak için blur
-    const blurRadius = 10;
+    const blurRadius = 8;
     const blurFilter = Skia.ImageFilter.MakeBlur(blurRadius, blurRadius, TileMode.Clamp, null);
     bronzePaint.setImageFilter(blurFilter);
 
-    // Yüz bölgesine filtre uygula
+    // Yüz bölgesine filtre uygula, gözler ve dudakları hariç tut
     frame.save();
     frame.clipPath(facePath, ClipOp.Intersect, true);
+    if (excludePath.countPoints() > 0) {
+      frame.clipPath(excludePath, ClipOp.Difference, true);
+    }
     frame.render(bronzePaint);
     frame.restore();
   }
-
-  const [capturedPhoto, setCapturedPhoto] = useState(null);
 
   async function takePhoto() {
     if (camera.current) {
@@ -142,8 +173,8 @@ function RealTimeScreen() {
     setCapturedPhoto(null);
   }
 
-  const renderProduct = ({ item, index }) => {
-    if (item.id === selectedProduct.id) return null; // Seçili ürün butonda gösterilecek
+  const renderProduct = ({ item }) => {
+    if (item.id === selectedProduct.id) return null;
     return (
       <TouchableOpacity
         style={styles.productItem}
@@ -162,6 +193,7 @@ function RealTimeScreen() {
           source={{ uri: `file://${capturedPhoto.path}` }}
           style={StyleSheet.absoluteFill}
         />
+        <Text style={styles.productInfo}>{selectedProduct.name}</Text>
         <View style={styles.previewButtons}>
           <TouchableOpacity style={styles.previewButton} onPress={buyProduct}>
             <Text style={styles.previewButtonText}>Satın Al</Text>
@@ -234,6 +266,7 @@ function RealTimeScreen() {
           No camera device or permission
         </Text>
       )}
+      <Text style={styles.productInfo}>{selectedProduct.name}</Text>
       <View style={styles.bottomContainer}>
         <FlatList
           ref={flatListRef}
@@ -260,7 +293,7 @@ function RealTimeScreen() {
       <View style={styles.toggleButtons}>
         <TouchableOpacity
           onPress={() =>
-            setCameraFacing((current) => (current10 === "front" ? "back" : "front"))
+            setCameraFacing((current) => (current === "front" ? "back" : "front"))
           }
           style={styles.toggleButton}
         >
@@ -290,7 +323,7 @@ function RealTimeScreen() {
 const styles = StyleSheet.create({
   bottomContainer: {
     position: "absolute",
-    bottom: 100,
+    bottom: 20,
     left: 0,
     right: 0,
     flexDirection: "row",
@@ -324,6 +357,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginHorizontal: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   innerCaptureButton: {
     width: 60,
@@ -344,7 +381,7 @@ const styles = StyleSheet.create({
   toggleButtons: {
     position: "absolute",
     top: 20,
-    right: 0,
+    right: 20,
     flexDirection: "column",
     alignItems: "flex-end",
   },
@@ -360,7 +397,7 @@ const styles = StyleSheet.create({
   },
   previewButtons: {
     position: "absolute",
-    bottom: 100,
+    bottom: 20,
     left: 0,
     right: 0,
     flexDirection: "row",
@@ -375,6 +412,16 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  productInfo: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    color: "#fff",
+    fontSize: 16,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 10,
+    borderRadius: 5,
   },
 });
 
