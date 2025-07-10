@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
-  Button,
+  TouchableOpacity,
   View,
+  Image,
+  FlatList,
   useWindowDimensions,
 } from "react-native";
 import {
   DrawableFrame,
-  Frame,
   Camera as VisionCamera,
   useCameraDevice,
   useCameraPermission,
@@ -17,24 +18,16 @@ import {
 import { useIsFocused } from "@react-navigation/core";
 import { useAppState } from "@react-native-community/hooks";
 import { Camera, Face } from "react-native-vision-camera-face-detector";
-import { ClipOp, Skia, TileMode } from "@shopify/react-native-skia";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { ClipOp, Skia, TileMode, BlendMode } from "@shopify/react-native-skia";
+import { PRODUCTS } from "../constants/products";
 
-/**
- * Face detection component
- *
- * @return {JSX.Element} Component
- */
 function RealTimeScreen() {
   const { width, height } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraMounted, setCameraMounted] = useState(true);
   const [cameraPaused, setCameraPaused] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("front");
+  const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0]); // Varsayılan ürün
   const faceDetectionOptions = useRef({
     performanceMode: "fast",
     classificationMode: "all",
@@ -47,318 +40,342 @@ function RealTimeScreen() {
   const appState = useAppState();
   const isCameraActive = !cameraPaused && isFocused && appState === "active";
   const cameraDevice = useCameraDevice(cameraFacing);
-  const format = cameraDevice
-  ? useCameraFormat(cameraDevice, [
-      {
-        videoResolution: {
-          width: 1280,
-          height: 720,
-        }
-      },
-      {
-        fps: 15,
-      },
-    ])
-  : undefined;
-  //
-  // vision camera ref
+  const format = useCameraFormat(cameraDevice, [
+    {
+      videoResolution: { width: 854, height: 480 },
+      fps: 30,
+    },
+  ]);
   const camera = useRef(null);
-  //
-  // face rectangle position
-  //
-  const aFaceW = useSharedValue(0);
-  const aFaceH = useSharedValue(0);
-  const aFaceX = useSharedValue(0);
-  const aFaceY = useSharedValue(0);
-  const aRot = useSharedValue(0);
-  const boundingBoxStyle = useAnimatedStyle(() => ({
-    position: "absolute",
-    borderWidth: 4,
-    borderLeftColor:   [149.69, -73.66, -131.32],
-    borderRightColor:  [149.69, -73.66, -131.32],
-    borderBottomColor: [149.69, -73.66, -131.32],
-    borderTopColor:    [76.25, -37.52, 156.83],
-    width: withTiming(aFaceW.value, {
-      duration: 100,
-    }),
-    height: withTiming(aFaceH.value, {
-      duration: 100,
-    }),
-    left: withTiming(aFaceX.value, {
-      duration: 100,
-    }),
-    top: withTiming(aFaceY.value, {
-      duration: 100,
-    }),
-    transform: [
-      {
-        rotate: `${aRot.value}deg`,
-      },
-    ],
-  }));
+  const flatListRef = useRef(null);
+  useEffect(() => {
+    if (!hasPermission) requestPermission();
+  }, [hasPermission]);
 
   useEffect(() => {
-    if (hasPermission) return;
-    requestPermission();
-  }, []);
+    // Seçili ürün değiştiğinde FlatList'i ortala
+    const index = PRODUCTS.findIndex((p) => p.id === selectedProduct.id);
+    flatListRef.current?.scrollToIndex({ index, animated: true });
+  }, [selectedProduct]);
 
-  /**
-   * Handle camera UI rotation
-   *
-   * @param {number} rotation Camera rotation
-   */
   function handleUiRotation(rotation) {
-    aRot.value = rotation;
+    // Kamera rotasyonu için
   }
 
-  /**
-   * Hanldes camera mount error event
-   *
-   * @param {any} error Error event
-   */
   function handleCameraMountError(error) {
     console.error("camera mount error", error);
   }
 
-  /**
-   * Handle detection result
-   *
-   * @param {Face[]} faces Detection result
-   * @param {Frame} frame Current frame
-   * @returns {void}
-   */
   function handleFacesDetected(faces, frame) {
-    // if no faces are detected we do nothing
-    if (faces.length <= 0) {
-      aFaceW.value = 0;
-      aFaceH.value = 0;
-      aFaceX.value = 0;
-      aFaceY.value = 0;
-      return;
-    }
+    if (faces.length <= 0) return;
+    // Yüz tespiti verileri sadece filtre için kullanılıyor
+  }
 
-    console.log(
-      "faces",
-      faces.length,
-      "frame",
-      frame.toString(),
-      "faces",
-      JSON.stringify(faces)
-    );
+  function handleSkiaActions(faces, frame) {
+    "worklet";
+    if (faces.length <= 0) return;
 
-    const { bounds } = faces[0];
-    const { width, height, x, y } = bounds;
-    aFaceW.value = width;
-    aFaceH.value = height;
-    aFaceX.value = x;
-    aFaceY.value = y;
+    const { contours } = faces[0];
 
-    // only call camera methods if ref is defined
+    // Yüz konturu oluştur
+    const facePath = Skia.Path.Make();
+    const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
+    necessaryContours.forEach((key) => {
+      contours?.[key]?.forEach((point, index) => {
+        if (index === 0) {
+          facePath.moveTo(point.x, point.y);
+        } else {
+          facePath.lineTo(point.x, point.y);
+        }
+      });
+      facePath.close();
+    });
+
+    // Seçili ürünün rengine göre bronzlaştırma filtresi
+    const color = selectedProduct.color;
+    const r = parseInt(color.slice(1, 3), 16) / 255;
+    const g = parseInt(color.slice(3, 5), 16) / 255;
+    const b = parseInt(color.slice(5, 7), 16) / 255;
+    const colorMatrix = [
+      1, 0, 0, 0, r * 0.2,
+      0, 1, 0, 0, g * 0.1,
+      0, 0, 1, 0, b * 0.05,
+      0, 0, 0, 0.5, 0,
+    ];
+    const bronzeFilter = Skia.ColorFilter.MakeMatrix(colorMatrix);
+    const bronzePaint = Skia.Paint();
+    bronzePaint.setColorFilter(bronzeFilter);
+    bronzePaint.setBlendMode(BlendMode.Overlay);
+
+    // Kenarları yumuşatmak için blur
+    const blurRadius = 10;
+    const blurFilter = Skia.ImageFilter.MakeBlur(blurRadius, blurRadius, TileMode.Clamp, null);
+    bronzePaint.setImageFilter(blurFilter);
+
+    // Yüz bölgesine filtre uygula
+    frame.save();
+    frame.clipPath(facePath, ClipOp.Intersect, true);
+    frame.render(bronzePaint);
+    frame.restore();
+  }
+
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
+
+  async function takePhoto() {
     if (camera.current) {
-      // take photo, capture video, etc...
+      try {
+        const photo = await camera.current.takePhoto();
+        setCapturedPhoto(photo);
+      } catch (error) {
+        console.error("Photo capture error:", error);
+      }
     }
   }
 
-  /**
-   * Handle skia frame actions
-   *
-   * @param {Face[]} faces Detection result
-   * @param {DrawableFrame} frame Current frame
-   * @returns {void}
-   */
-  function handleSkiaActions(faces, frame) {
-    "worklet";
-    // if no faces are detected we do nothing
-    if (faces.length <= 0) return;
+  function buyProduct() {
+    if (selectedProduct.link) {
+      Linking.openURL(selectedProduct.link);
+    }
+  }
 
-    console.log("SKIA - faces", faces.length, "frame", frame.toString());
+  function closePreview() {
+    setCapturedPhoto(null);
+  }
 
-    const { bounds, contours, landmarks } = faces[0];
-
-    // draw a blur shape around the face points
-    const blurRadius = 25;
-    const blurFilter = Skia.ImageFilter.MakeBlur(
-      blurRadius,
-      blurRadius,
-      TileMode.Repeat,
-      null
+  const renderProduct = ({ item, index }) => {
+    if (item.id === selectedProduct.id) return null; // Seçili ürün butonda gösterilecek
+    return (
+      <TouchableOpacity
+        style={styles.productItem}
+        onPress={() => setSelectedProduct(item)}
+      >
+        <Image source={item.pngImage} style={styles.productImage} />
+        <Text style={styles.productName}>{item.name}</Text>
+      </TouchableOpacity>
     );
-    const blurPaint = Skia.Paint();
-    blurPaint.setImageFilter(blurFilter);
-    const contourPath = Skia.Path.Make();
-    const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
+  };
 
-    necessaryContours.map((key) => {
-      contours?.[key]?.map((point, index) => {
-        if (index === 0) {
-          // it's a starting point
-          contourPath.moveTo(point.x, point.y);
-        } else {
-          // it's a continuation
-          contourPath.lineTo(point.x, point.y);
-        }
-      });
-      contourPath.close();
-    });
-
-    frame.save();
-    frame.clipPath(contourPath, ClipOp.Intersect, true);
-    frame.render(blurPaint);
-    frame.restore();
-
-    // draw mouth shape
-    const mouthPath = Skia.Path.Make();
-    const mouthPaint = Skia.Paint();
-    mouthPaint.setColor(Skia.Color("red"));
-    const necessaryLandmarks = ["MOUTH_BOTTOM", "MOUTH_LEFT", "MOUTH_RIGHT"];
-
-    necessaryLandmarks.map((key, index) => {
-      const point = landmarks?.[key];
-      if (!point) return;
-
-      if (index === 0) {
-        // it's a starting point
-        mouthPath.moveTo(point.x, point.y);
-      } else {
-        // it's a continuation
-        mouthPath.lineTo(point.x, point.y);
-      }
-    });
-    mouthPath.close();
-    frame.drawPath(mouthPath, mouthPaint);
-
-    // draw a rectangle around the face
-    const rectPaint = Skia.Paint();
-    rectPaint.setColor(Skia.Color("blue"));
-    rectPaint.setStyle(1);
-    rectPaint.setStrokeWidth(5);
-    frame.drawRect(bounds, rectPaint);
+  if (capturedPhoto) {
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        <Image
+          source={{ uri: `file://${capturedPhoto.path}` }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.previewButtons}>
+          <TouchableOpacity style={styles.previewButton} onPress={buyProduct}>
+            <Text style={styles.previewButtonText}>Satın Al</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.previewButton} onPress={() => {}}>
+            <Text style={styles.previewButtonText}>Paylaş</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.previewButton} onPress={closePreview}>
+            <Text style={styles.previewButtonText}>Kapat</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   }
 
   return (
-    <>
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            alignItems: "center",
-            justifyContent: "center",
-          },
-        ]}
-      >
-        {hasPermission && cameraDevice ? (
-          <>
-            {cameraMounted && (
-              <>
-                <Camera
-                  // @ts-ignore
-                  ref={camera}
-                  style={StyleSheet.absoluteFill}
-                  isActive={isCameraActive}
-                  device={cameraDevice}
-                  onError={handleCameraMountError}
-                  faceDetectionCallback={handleFacesDetected}
-                  onUIRotationChanged={handleUiRotation}
-                  skiaActions={handleSkiaActions}
-                  faceDetectionOptions={{
-                    ...faceDetectionOptions,
-                    cameraFacing,
+    <View style={StyleSheet.absoluteFill}>
+      {hasPermission && cameraDevice ? (
+        <>
+          {cameraMounted && (
+            <>
+              <Camera
+                ref={camera}
+                style={StyleSheet.absoluteFill}
+                isActive={isCameraActive}
+                device={cameraDevice}
+                onError={handleCameraMountError}
+                faceDetectionCallback={handleFacesDetected}
+                onUIRotationChanged={handleUiRotation}
+                skiaActions={handleSkiaActions}
+                faceDetectionOptions={faceDetectionOptions}
+                format={format}
+                photo={true}
+              />
+              {cameraPaused && (
+                <Text
+                  style={{
+                    width: "100%",
+                    backgroundColor: "rgb(0,0,255)",
+                    textAlign: "center",
+                    color: "white",
                   }}
-                  format={format}
-                />
-
-                <Animated.View style={boundingBoxStyle} />
-
-                {cameraPaused && (
-                  <Text
-                    style={{
-                      width: "100%",
-                      backgroundColor: "rgb(0,0,255)",
-                      textAlign: "center",
-                      color: "white",
-                    }}
-                  >
-                    Camera is PAUSED
-                  </Text>
-                )}
-              </>
-            )}
-
-            {!cameraMounted && (
-              <Text
-                style={{
-                  width: "100%",
-                  backgroundColor: "rgb(255,255,0)",
-                  textAlign: "center",
-                }}
-              >
-                Camera is NOT mounted
-              </Text>
-            )}
-          </>
-        ) : (
-          <Text
-            style={{
-              width: "100%",
-              backgroundColor: "rgb(255,0,0)",
-              textAlign: "center",
-              color: "white",
-            }}
-          >
-            No camera device or permission
+                >
+                  Camera is PAUSED
+                </Text>
+              )}
+            </>
+          )}
+          {!cameraMounted && (
+            <Text
+              style={{
+                width: "100%",
+                backgroundColor: "rgb(255,255,0)",
+                textAlign: "center",
+              }}
+            >
+              Camera is NOT mounted
+            </Text>
+          )}
+        </>
+      ) : (
+        <Text
+          style={{
+            width: "100%",
+            backgroundColor: "rgb(255,0,0)",
+            textAlign: "center",
+            color: "white",
+          }}
+        >
+          No camera device or permission
+        </Text>
+      )}
+      <View style={styles.bottomContainer}>
+        <FlatList
+          ref={flatListRef}
+          data={PRODUCTS}
+          renderItem={renderProduct}
+          keyExtractor={(item) => item.id.toString()}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.productList}
+          contentContainerStyle={{ paddingHorizontal: 10 }}
+          initialScrollIndex={PRODUCTS.findIndex((p) => p.id === selectedProduct.id)}
+          getItemLayout={(data, index) => ({
+            length: 80,
+            offset: 80 * index,
+            index,
+          })}
+        />
+        <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
+          <Image source={selectedProduct.pngImage} style={styles.captureButtonImage} />
+          <View style={styles.innerCaptureButton} />
+        </TouchableOpacity>
+        <View style={styles.dummyView} />
+      </View>
+      <View style={styles.toggleButtons}>
+        <TouchableOpacity
+          onPress={() =>
+            setCameraFacing((current) => (current10 === "front" ? "back" : "front"))
+          }
+          style={styles.toggleButton}
+        >
+          <Text style={styles.toggleButtonText}>Toggle Cam</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setCameraPaused((current) => !current)}
+          style={styles.toggleButton}
+        >
+          <Text style={styles.toggleButtonText}>
+            {cameraPaused ? "Resume" : "Pause"} Cam
           </Text>
-        )}
-      </View>
-
-      <View
-        style={{
-          position: "absolute",
-          bottom: 20,
-          left: 0,
-          right: 0,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <View
-          style={{
-            width: "100%",
-            display: "flex",
-            flexDirection: "row",
-            justifyContent: "space-around",
-          }}
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setCameraMounted((current) => !current)}
+          style={styles.toggleButton}
         >
-          <Button
-            onPress={() =>
-              setCameraFacing((current) =>
-                current === "front" ? "back" : "front"
-              )
-            }
-            title={"Toggle Cam"}
-          />
-
-        </View>
-        <View
-          style={{
-            width: "100%",
-            display: "flex",
-            flexDirection: "row",
-            justifyContent: "space-around",
-          }}
-        >
-          <Button
-            onPress={() => setCameraPaused((current) => !current)}
-            title={`${cameraPaused ? "Resume" : "Pause"} Cam`}
-          />
-
-          <Button
-            onPress={() => setCameraMounted((current) => !current)}
-            title={`${cameraMounted ? "Unmount" : "Mount"} Cam`}
-          />
-        </View>
+          <Text style={styles.toggleButtonText}>
+            {cameraMounted ? "Unmount" : "Mount"} Cam
+          </Text>
+        </TouchableOpacity>
       </View>
-    </>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  bottomContainer: {
+    position: "absolute",
+    bottom: 100,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productList: {
+    flexGrow: 0,
+    maxWidth: "40%",
+  },
+  productItem: {
+    alignItems: "center",
+    marginHorizontal: 10,
+  },
+  productImage: {
+    width: 60,
+    height: 60,
+    resizeMode: "contain",
+  },
+  productName: {
+    color: "#fff",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  captureButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 4,
+    borderColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 20,
+  },
+  innerCaptureButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    position: "absolute",
+  },
+  captureButtonImage: {
+    width: 40,
+    height: 40,
+    resizeMode: "contain",
+    zIndex: 1,
+  },
+  dummyView: {
+    width: "40%",
+  },
+  toggleButtons: {
+    position: "absolute",
+    top: 20,
+    right: 0,
+    flexDirection: "column",
+    alignItems: "flex-end",
+  },
+  toggleButton: {
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 10,
+    borderRadius: 5,
+    marginVertical: 5,
+  },
+  toggleButtonText: {
+    color: "#fff",
+    fontSize: 14,
+  },
+  previewButtons: {
+    position: "absolute",
+    bottom: 100,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-around",
+  },
+  previewButton: {
+    backgroundColor: "rgba(0,0,0,0.7)",
+    padding: 15,
+    borderRadius: 10,
+  },
+  previewButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+});
 
 export default RealTimeScreen;
