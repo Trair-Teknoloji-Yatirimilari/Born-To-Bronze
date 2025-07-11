@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   View,
   Image,
-  FlatList,
   useWindowDimensions,
 } from "react-native";
 import {
@@ -19,7 +18,9 @@ import { useIsFocused } from "@react-navigation/core";
 import { useAppState } from "@react-native-community/hooks";
 import { Camera, Face } from "react-native-vision-camera-face-detector";
 import { ClipOp, Skia, TileMode, BlendMode } from "@shopify/react-native-skia";
-
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { runOnJS } from "react-native-reanimated";
+import { PRODUCTS } from "../constants/products";
 
 
 function RealTimeScreen() {
@@ -30,7 +31,6 @@ function RealTimeScreen() {
   const [cameraFacing, setCameraFacing] = useState("front");
   const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0]);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
-  const flatListRef = useRef(null);
   const faceDetectionOptions = useRef({
     performanceMode: "fast",
     classificationMode: "all",
@@ -54,11 +54,6 @@ function RealTimeScreen() {
   useEffect(() => {
     if (!hasPermission) requestPermission();
   }, [hasPermission]);
-
-  useEffect(() => {
-    const index = PRODUCTS.findIndex((p) => p.id === selectedProduct.id);
-    flatListRef.current?.scrollToIndex({ index, animated: true });
-  }, [selectedProduct]);
 
   function handleUiRotation(rotation) {}
 
@@ -173,18 +168,45 @@ function RealTimeScreen() {
     setCapturedPhoto(null);
   }
 
-  const renderProduct = ({ item }) => {
-    if (item.id === selectedProduct.id) return null;
-    return (
-      <TouchableOpacity
-        style={styles.productItem}
-        onPress={() => setSelectedProduct(item)}
-      >
-        <Image source={item.pngImage} style={styles.productImage} />
-        <Text style={styles.productName}>{item.name}</Text>
-      </TouchableOpacity>
-    );
+  const getCurrentProductIndex = () => {
+    return PRODUCTS.findIndex((p) => p.id === selectedProduct.id);
   };
+
+  const getPreviousProduct = () => {
+    const currentIndex = getCurrentProductIndex();
+    const prevIndex = currentIndex > 0 ? currentIndex - 1 : PRODUCTS.length - 1;
+    return PRODUCTS[prevIndex];
+  };
+
+  const getNextProduct = () => {
+    const currentIndex = getCurrentProductIndex();
+    const nextIndex = currentIndex < PRODUCTS.length - 1 ? currentIndex + 1 : 0;
+    return PRODUCTS[nextIndex];
+  };
+
+  const switchToPreviousProduct = () => {
+    setSelectedProduct(getPreviousProduct());
+  };
+
+  const switchToNextProduct = () => {
+    setSelectedProduct(getNextProduct());
+  };
+
+  // Swipe gesture tanımla
+  const swipeGesture = Gesture.Pan()
+    .onEnd((event) => {
+      'worklet';
+      const { velocityX, translationX } = event;
+      
+      // Sağa kaydırma (önceki ürün)
+      if (translationX > 50 || velocityX > 500) {
+        runOnJS(switchToPreviousProduct)();
+      }
+      // Sola kaydırma (sonraki ürün)
+      else if (translationX < -50 || velocityX < -500) {
+        runOnJS(switchToNextProduct)();
+      }
+    });
 
   if (capturedPhoto) {
     return (
@@ -267,29 +289,54 @@ function RealTimeScreen() {
         </Text>
       )}
       <Text style={styles.productInfo}>{selectedProduct.name}</Text>
-      <View style={styles.bottomContainer}>
-        <FlatList
-          ref={flatListRef}
-          data={PRODUCTS}
-          renderItem={renderProduct}
-          keyExtractor={(item) => item.id.toString()}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.productList}
-          contentContainerStyle={{ paddingHorizontal: 10 }}
-          initialScrollIndex={PRODUCTS.findIndex((p) => p.id === selectedProduct.id)}
-          getItemLayout={(data, index) => ({
-            length: 80,
-            offset: 80 * index,
-            index,
-          })}
-        />
-        <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
-          <Image source={selectedProduct.pngImage} style={styles.captureButtonImage} />
-          <View style={styles.innerCaptureButton} />
+      <GestureDetector gesture={swipeGesture}>
+        <View style={styles.bottomContainer}>
+          {/* Sol yan ürün */}
+          <TouchableOpacity 
+            style={styles.sideProduct} 
+            onPress={switchToPreviousProduct}
+          >
+            <Image 
+              source={getPreviousProduct().pngImage} 
+              style={styles.sideProductImage} 
+            />
+            <Text style={styles.sideProductName}>
+              {getPreviousProduct().name}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Ana fotoğraf çekme butonu */}
+          <TouchableOpacity style={styles.mainCaptureButton} onPress={takePhoto}>
+            <Image 
+              source={selectedProduct.pngImage} 
+              style={styles.mainCaptureButtonImage} 
+            />
+            <View style={styles.innerMainCaptureButton} />
+                      <Text style={styles.mainCaptureButtonText}>
+            {selectedProduct.name}
+          </Text>
         </TouchableOpacity>
-        <View style={styles.dummyView} />
-      </View>
+        
+        {/* Swipe ipucu */}
+        <View style={styles.swipeIndicator}>
+          <Text style={styles.swipeText}>← Kaydır →</Text>
+        </View>
+
+          {/* Sağ yan ürün */}
+          <TouchableOpacity 
+            style={styles.sideProduct} 
+            onPress={switchToNextProduct}
+          >
+            <Image 
+              source={getNextProduct().pngImage} 
+              style={styles.sideProductImage} 
+            />
+            <Text style={styles.sideProductName}>
+              {getNextProduct().name}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </GestureDetector>
       <View style={styles.toggleButtons}>
         <TouchableOpacity
           onPress={() =>
@@ -323,60 +370,79 @@ function RealTimeScreen() {
 const styles = StyleSheet.create({
   bottomContainer: {
     position: "absolute",
-    bottom: 20,
+    bottom: 100,
     left: 0,
     right: 0,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-around",
+    paddingHorizontal: 20,
   },
-  productList: {
-    flexGrow: 0,
-    maxWidth: "40%",
-  },
-  productItem: {
+  sideProduct: {
     alignItems: "center",
-    marginHorizontal: 10,
+    opacity: 0.6,
+    transform: [{ scale: 0.8 }],
   },
-  productImage: {
-    width: 60,
-    height: 60,
+  sideProductImage: {
+    width: 50,
+    height: 50,
     resizeMode: "contain",
   },
-  productName: {
+  sideProductName: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 10,
     textAlign: "center",
+    marginTop: 5,
+    maxWidth: 60,
   },
-  captureButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+  mainCaptureButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     borderWidth: 4,
     borderColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-    marginHorizontal: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
-  innerCaptureButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "rgba(255,255,255,0.3)",
+  innerMainCaptureButton: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "rgba(255,255,255,0.2)",
     position: "absolute",
   },
-  captureButtonImage: {
-    width: 40,
-    height: 40,
+  mainCaptureButtonImage: {
+    width: 60,
+    height: 60,
     resizeMode: "contain",
     zIndex: 1,
   },
-  dummyView: {
-    width: "40%",
+  mainCaptureButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    textAlign: "center",
+    fontWeight: "bold",
+    position: "absolute",
+    bottom: -25,
+    left: 0,
+    right: 0,
+  },
+  swipeIndicator: {
+    position: "absolute",
+    bottom: -50,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  swipeText: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 14,
+    fontWeight: "500",
   },
   toggleButtons: {
     position: "absolute",
@@ -397,7 +463,7 @@ const styles = StyleSheet.create({
   },
   previewButtons: {
     position: "absolute",
-    bottom: 20,
+    bottom: 100,
     left: 0,
     right: 0,
     flexDirection: "row",
