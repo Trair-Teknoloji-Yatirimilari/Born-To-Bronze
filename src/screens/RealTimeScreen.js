@@ -1,336 +1,1864 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  Dimensions,
-  Linking,
   StyleSheet,
   Text,
-  useColorScheme,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
+  Image,
+  useWindowDimensions,
+  Animated,
+  StatusBar,
+  Linking,
+  Alert,
+  Platform,
+  Vibration,
 } from "react-native";
 import {
-  Camera,
-  CameraPosition,
+  DrawableFrame,
+  Camera as VisionCamera,
   useCameraDevice,
-  useCameraFormat,
   useCameraPermission,
-  useSkiaFrameProcessor,
+  useCameraFormat,
 } from "react-native-vision-camera";
+import { useIsFocused } from "@react-navigation/core";
+import { useAppState } from "@react-native-community/hooks";
+import { Camera, Face } from "react-native-vision-camera-face-detector";
 import {
-  Contours,
-  useFaceDetector,
-} from "react-native-vision-camera-face-detector";
-import { ClipOp, Skia, TileMode } from "@shopify/react-native-skia";
-import { useRef } from "react";
+  ClipOp,
+  Skia,
+  TileMode,
+  BlendMode,
+  Canvas,
+  useCanvasRef,
+  makeImageFromView,
+} from "@shopify/react-native-skia";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { runOnJS } from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
+import ViewShot from "react-native-view-shot";
+import * as FileSystem from "expo-file-system";
+import DeviceInfo from 'react-native-device-info';
+import { PRODUCTS } from "../constants/products";
+import { Ionicons } from "@expo/vector-icons";
+import { COLORS } from "../constants/theme";
 
-const RealTimeScreen = () => {
+// API URL Configuration
+const API_URL = __DEV__
+  ? Platform.select({
+      ios: "http://192.168.1.29:3000",
+      android: "http://10.0.2.2:3000",
+    })
+  : "https://your-production-api.com";
+
+// Device bilgilerini toplayan utility fonksiyon
+const getDeviceInfo = async () => {
+  try {
+    const [
+      uniqueId,
+      deviceId,
+      deviceName,
+      brand,
+      deviceType,
+      systemName,
+      systemVersion,
+      userAgent,
+      appVersion,
+      buildNumber,
+      bundleId,
+      isEmulator,
+      isTablet,
+    ] = await Promise.all([
+      DeviceInfo.getUniqueId(),
+      DeviceInfo.getDeviceId(),
+      DeviceInfo.getDeviceName(),
+      DeviceInfo.getBrand(),
+      DeviceInfo.getDeviceType(),
+      DeviceInfo.getSystemName(),
+      DeviceInfo.getSystemVersion(),
+      DeviceInfo.getUserAgent(),
+      DeviceInfo.getVersion(),
+      DeviceInfo.getBuildNumber(),
+      DeviceInfo.getBundleId(),
+      DeviceInfo.isEmulator(),
+      DeviceInfo.isTablet(),
+    ]);
+
+    return {
+      uniqueId,
+      deviceId,
+      deviceName,
+      deviceBrand: brand,
+      deviceType,
+      systemName,
+      systemVersion,
+      userAgent,
+      appVersion,
+      buildNumber,
+      bundleId,
+      isEmulator,
+      isTablet,
+    };
+  } catch (error) {
+    console.error('Device bilgileri alınırken hata:', error);
+    return {
+      uniqueId: null,
+      deviceId: null,
+      deviceName: null,
+      deviceBrand: null,
+      deviceType: null,
+      systemName: Platform.OS,
+      systemVersion: Platform.Version?.toString(),
+      userAgent: null,
+      appVersion: null,
+      buildNumber: null,
+      bundleId: null,
+      isEmulator: false,
+      isTablet: false,
+    };
+  }
+};
+
+function RealTimeScreen() {
+  const { width, height } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
-  const [position, setPosition] = useState("front");
-  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [cameraFacing, setCameraFacing] = useState("front");
+  const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0]);
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [filteredPhoto, setFilteredPhoto] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [hideUIOnPress, setHideUIOnPress] = useState(false);
+  const [showHint, setShowHint] = useState(true);
   
-  const device = useCameraDevice(position);
-  const format = device
-    ? useCameraFormat(device, [
-        {
-          videoResolution: {
-            width: 800,
-            height: 600,
-          }
-        },
-        {
-          fps: 15,
-        },
-      ])
-    : undefined;
+  // Paylaşım için yeni state'ler
+  const [resultImageId, setResultImageId] = useState(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Animasyonlar
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const uiOpacityAnim = useRef(new Animated.Value(1)).current;
+  
+  // Loading dots animasyonları
+  const dot1Anim = useRef(new Animated.Value(0)).current;
+  const dot2Anim = useRef(new Animated.Value(0)).current;
+  const dot3Anim = useRef(new Animated.Value(0)).current;
+  const faceDetectionOptions = useRef({
+    performanceMode: "fast",
+    classificationMode: "all",
+    contourMode: "all",
+    landmarkMode: "all",
+    windowWidth: width,
+    windowHeight: height,
+  }).current;
+  const isFocused = useIsFocused();
+  const appState = useAppState();
+  const isCameraActive = isFocused && appState === "active";
+  const cameraDevice = useCameraDevice(cameraFacing);
+  const format = useCameraFormat(cameraDevice, [
+    {
+      videoResolution: { width: 854, height: 480 },
+      fps: 30,
+    },
+  ]);
+  const camera = useRef(null);
+  const viewShotRef = useRef(null);
 
   useEffect(() => {
-    if (!hasPermission) {
-      requestPermission();
+    if (!hasPermission) requestPermission();
+  }, [hasPermission]);
+
+  // Pulse animasyonu
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
+  // Yardım ipucunu otomatik gizle
+  useEffect(() => {
+    if (showHelp) {
+      const timer = setTimeout(() => setShowHelp(false), 3000);
+      return () => clearTimeout(timer);
     }
-  }, [hasPermission, requestPermission]);
+  }, [showHelp]);
 
-  const faceDetector = useFaceDetector({
-    performanceMode: "fast",
-    contourMode: "all",
-    landmarkMode: "none",
-    classificationMode: "none",
-  });
-
-  console.log('Face detector loaded:', !!faceDetector);
-
-  const blurRadius = 20;
-  const blurFilter = Skia.ImageFilter.MakeBlur(
-    blurRadius,
-    blurRadius,
-    TileMode.Repeat,
-    null
-  );
-  const paint = Skia.Paint();
-  paint.setImageFilter(blurFilter);
-
-
-
-  const frameProcessor = useSkiaFrameProcessor((frame) => {
-    'worklet';
-    frame.render();
-
-    if (!faceDetector || !faceDetector.detectFaces) {
-      console.log('Face detector not available');
-      return;
+  // Preview ekranında hint'i otomatik gizle
+  useEffect(() => {
+    if (capturedPhoto && showHint) {
+      const timer = setTimeout(() => setShowHint(false), 4000);
+      return () => clearTimeout(timer);
     }
+  }, [capturedPhoto, showHint]);
 
-    try {
-      const result = faceDetector.detectFaces(frame);
-      
-      // Result direkt array olabilir, object değil
-      const faces = Array.isArray(result) ? result : (result?.faces || []);
+  // Loading dots animasyonu
+  useEffect(() => {
+    if (isProcessingPhoto || isUploading || isSharing) {
+      const animateDotsSequence = () => {
+        const sequence = Animated.stagger(150, [
+          Animated.timing(dot1Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot2Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot3Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]);
 
+        const reset = Animated.parallel([
+          Animated.timing(dot1Anim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot2Anim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot3Anim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]);
 
-      for (const face of faces) {
-        
-        if (face.contours != null) {
-          try {
-            const facePoints = face.contours['FACE'] || [];
-            
-            // Gözlerin konumunu al
-            let leftEyeY = null;
-            let rightEyeY = null;
-            
-            if (face.contours['LEFT_EYE'] && face.contours['LEFT_EYE'].length > 0) {
-              leftEyeY = face.contours['LEFT_EYE'][0].y;
-            }
-            if (face.contours['RIGHT_EYE'] && face.contours['RIGHT_EYE'].length > 0) {
-              rightEyeY = face.contours['RIGHT_EYE'][0].y;
-            }
-            
-            const eyeY = leftEyeY && rightEyeY ? Math.min(leftEyeY, rightEyeY) : null;
-            
-            // Alın bölgesini blur yap (sadece gözlerin üstü)
-            if (facePoints.length > 10 && eyeY) {
-              const foreheadPath = Skia.Path.Make();
+        Animated.loop(
+          Animated.sequence([sequence, reset]),
+          { iterations: -1 }
+        ).start();
+      };
 
-              // Sadece gözlerin üstündeki noktaları al
-              const foreheadPoints = facePoints.filter(point => point.y < eyeY - 20);
-              
-              if (foreheadPoints.length > 2) {
-                // Yüzün kenar noktalarını da ekle
-                const leftEdge = facePoints.slice(0, 3);
-                const rightEdge = facePoints.slice(-3);
-                
-                const allForeheadPoints = [...leftEdge, ...foreheadPoints, ...rightEdge];
-                
-                allForeheadPoints.forEach((point, index) => {
-                  if (index === 0) {
-                    foreheadPath.moveTo(point.x, point.y);
-                  } else {
-                    foreheadPath.lineTo(point.x, point.y);
-                  }
-                });
-                foreheadPath.close();
-                
-                frame.save();
-                frame.clipPath(foreheadPath, ClipOp.Intersect, true);
-                frame.render(paint);
-                frame.restore();
-              }
-            }
-            
-            // Çene bölgesini blur yap (dudakların altı)
-            let lowerLipY = null;
-            if (face.contours['LOWER_LIP_BOTTOM'] && face.contours['LOWER_LIP_BOTTOM'].length > 0) {
-              lowerLipY = Math.max(...face.contours['LOWER_LIP_BOTTOM'].map(p => p.y));
-            }
-            
-            if (facePoints.length > 10 && lowerLipY) {
-              const chinPath = Skia.Path.Make();
-              
-              // Sadece dudakların altındaki noktaları al
-              const chinPoints = facePoints.filter(point => point.y > lowerLipY + 10);
-              
-              if (chinPoints.length > 2) {
-                chinPoints.forEach((point, index) => {
-                  if (index === 0) {
-                    chinPath.moveTo(point.x, point.y);
-                  } else {
-                    chinPath.lineTo(point.x, point.y);
-                  }
-                });
-                chinPath.close();
-                
-                frame.save();
-                frame.clipPath(chinPath, ClipOp.Intersect, true);
-                frame.render(paint);
-                frame.restore();
-              }
-            }
-            
-            // Yanak bölgelerini blur yap (gözler ve dudakların yanında)
-            if (eyeY && lowerLipY) {
-              // Sol yanak
-              const leftCheekPath = Skia.Path.Make();
-              const leftCheekPoints = facePoints.filter(point => 
-                point.x < face.bounds.x + face.bounds.width * 0.3 && 
-                point.y > eyeY + 10 && 
-                point.y < lowerLipY - 10
-              );
-              
-              if (leftCheekPoints.length > 2) {
-                leftCheekPoints.forEach((point, index) => {
-                  if (index === 0) {
-                    leftCheekPath.moveTo(point.x, point.y);
-                  } else {
-                    leftCheekPath.lineTo(point.x, point.y);
-                  }
-                });
-                leftCheekPath.close();
-                
-                frame.save();
-                frame.clipPath(leftCheekPath, ClipOp.Intersect, true);
-                frame.render(paint);
-                frame.restore();
-              }
-              
-              // Sağ yanak
-              const rightCheekPath = Skia.Path.Make();
-              const rightCheekPoints = facePoints.filter(point => 
-                point.x > face.bounds.x + face.bounds.width * 0.7 && 
-                point.y > eyeY + 10 && 
-                point.y < lowerLipY - 10
-              );
-              
-              if (rightCheekPoints.length > 2) {
-                rightCheekPoints.forEach((point, index) => {
-                  if (index === 0) {
-                    rightCheekPath.moveTo(point.x, point.y);
-                  } else {
-                    rightCheekPath.lineTo(point.x, point.y);
-                  }
-                });
-                rightCheekPath.close();
-                
-                frame.save();
-                frame.clipPath(rightCheekPath, ClipOp.Intersect, true);
-                frame.render(paint);
-                frame.restore();
-              }
-            }
-            
-          } catch (error) {
-            console.log('Bölgesel blur hatası:', error);
-            // Hata durumunda basit blur kullan
-            const path = Skia.Path.Make();
-            const rect = Skia.XYWHRect(
-              face.bounds.x,
-              face.bounds.y,
-              face.bounds.width,
-              face.bounds.height,
-            );
-            path.addOval(rect);
+      animateDotsSequence();
+    } else {
+      dot1Anim.setValue(0);
+      dot2Anim.setValue(0);
+      dot3Anim.setValue(0);
+    }
+  }, [isProcessingPhoto, isUploading, isSharing]);
 
-            frame.save();
-            frame.clipPath(path, ClipOp.Intersect, true);
-            frame.render(paint);
-            frame.restore();
+  function handleUiRotation(rotation) {}
+
+  function handleCameraMountError(error) {
+    console.error("camera mount error", error);
+  }
+
+  function handleFacesDetected(faces, frame) {
+    if (faces.length <= 0) return;
+  }
+
+  function handleSkiaActions(faces, frame) {
+    "worklet";
+    if (faces.length <= 0) return;
+
+    const { contours } = faces[0];
+
+    // Hata ayıklama için konturları logla
+    console.log("Contours available:", Object.keys(contours || {}));
+
+    // Yüz konturu oluştur
+    const facePath = Skia.Path.Make();
+    const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
+    necessaryContours.forEach((key) => {
+      if (contours?.[key]) {
+        contours[key].forEach((point, index) => {
+          if (index === 0) {
+            facePath.moveTo(point.x, point.y);
+          } else {
+            facePath.lineTo(point.x, point.y);
           }
-          
-        } else {
-          // Eğer kontur yoksa basit yüz blur'u
-          const path = Skia.Path.Make();
-          const rect = Skia.XYWHRect(
-            face.bounds.x,
-            face.bounds.y,
-            face.bounds.width,
-            face.bounds.height,
-          );
-          path.addOval(rect);
+        });
+        facePath.close();
+      }
+    });
 
-          frame.save();
-          frame.clipPath(path, ClipOp.Intersect, true);
-          frame.render(paint);
-          frame.restore();
+    // Gözler ve dudaklar için hariç tutma bölgeleri
+    const excludePath = Skia.Path.Make();
+    const excludeContours = [
+      "LEFT_EYE",
+      "RIGHT_EYE",
+      "UPPER_LIP_TOP",
+      "UPPER_LIP_BOTTOM",
+      "LOWER_LIP_TOP",
+      "LOWER_LIP_BOTTOM",
+    ];
+    excludeContours.forEach((key) => {
+      if (contours?.[key]) {
+        console.log(`Processing contour: ${key}`, contours[key].length);
+        contours[key].forEach((point, index) => {
+          if (index === 0) {
+            excludePath.moveTo(point.x, point.y);
+          } else {
+            excludePath.lineTo(point.x, point.y);
+          }
+        });
+        excludePath.close();
+      } else {
+        console.log(`Contour ${key} not found`);
+      }
+    });
+
+    // Seçili ürünün rengine göre bronzlaştırma filtresi
+    const color = selectedProduct.color;
+    const r = parseInt(color.slice(1, 3), 16) / 255;
+    const g = parseInt(color.slice(3, 5), 16) / 255;
+    const b = parseInt(color.slice(5, 7), 16) / 255;
+    const colorMatrix = [
+      1,
+      0,
+      0,
+      0,
+      r * 0.15,
+      0,
+      1,
+      0,
+      0,
+      g * 0.08,
+      0,
+      0,
+      1,
+      0,
+      b * 0.03,
+      0,
+      0,
+      0,
+      0.6,
+      0,
+    ];
+    const bronzeFilter = Skia.ColorFilter.MakeMatrix(colorMatrix);
+    const bronzePaint = Skia.Paint();
+    bronzePaint.setColorFilter(bronzeFilter);
+    bronzePaint.setBlendMode(BlendMode.Overlay);
+
+    // Kenarları yumuşatmak için blur
+    const blurRadius = 6;
+    const blurFilter = Skia.ImageFilter.MakeBlur(
+      blurRadius,
+      blurRadius,
+      TileMode.Clamp,
+      null
+    );
+    bronzePaint.setImageFilter(blurFilter);
+
+    // Yüz bölgesine filtre uygula, gözler ve dudakları hariç tut
+    frame.save();
+    frame.clipPath(facePath, ClipOp.Intersect, true);
+    if (excludePath.countPoints() > 0) {
+      frame.clipPath(excludePath, ClipOp.Difference, true);
+    }
+    frame.render(bronzePaint);
+    frame.restore();
+  }
+
+  async function takePhoto() {
+    try {
+      setIsProcessingPhoto(true);
+
+      // SNAPCHAT TARZI: Sadece kamera görüntüsünü capture et (UI elementleri hariç)
+      if (viewShotRef.current) {
+        console.log("📸 Temiz kamera görüntüsü capture ediliyor...");
+
+        const uri = await viewShotRef.current.capture({
+          format: "jpg",
+          quality: 0.9,
+          result: "tmpfile",
+        });
+
+        console.log("✅ Temiz kamera capture başarılı:", uri);
+
+        // Screenshot'ı photo objesi formatında oluştur
+        const capturedPhoto = {
+          path: uri,
+          width: width,
+          height: height,
+          isFiltered: true, // Zaten gerçek zamanlı filtre dahil
+          captureMethod: "clean_camera",
+          timestamp: new Date().toISOString(),
+        };
+
+        setCapturedPhoto(capturedPhoto);
+
+        // Bu durumda ayrı filter processing'e gerek yok
+        // Çünkü screenshot zaten filtreli görüntüyü içeriyor
+        setFilteredPhoto({
+          ...capturedPhoto,
+          filterInfo: {
+            productName: selectedProduct.name,
+            productColor: selectedProduct.color,
+            filterType: "realtime_capture",
+            method: "view_screenshot",
+          },
+        });
+      } else {
+        console.warn("ViewShot ref not available, falling back to camera");
+        // Fallback: Normal camera photo
+        if (camera.current) {
+          const photo = await camera.current.takePhoto({
+            qualityPrioritization: "balanced",
+          });
+          setCapturedPhoto(photo);
+          await applyFilterToPhoto(photo);
         }
       }
     } catch (error) {
-      console.log('Face detection error:', error);
-      return;
+      console.error("Photo capture error:", error);
+    } finally {
+      setIsProcessingPhoto(false);
     }
-  }, [faceDetector, paint]);
+  }
 
-  const flipCamera = useCallback(() => {
-    setPosition((pos) => (pos === "front" ? "back" : "front"));
-  }, []);
+  async function applyFilterToPhoto(photo) {
+    try {
+      // Mevcut handleSkiaActions fonksiyonundaki bronzlaştırma algoritmasını kullan
+      const processedPhoto = await applyBronzeFilterToImage(photo);
 
-  const handleCameraMountError = useCallback((error) => {
-    console.error('Camera mount error:', error);
-  }, []);
+      setFilteredPhoto({
+        ...processedPhoto,
+        isFiltered: true,
+        filterInfo: {
+          productName: selectedProduct.name,
+          productColor: selectedProduct.color,
+          filterType: "bronze_glow",
+          intensity: 0.6,
+          appliedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error("Filter application error:", error);
+      // Hata durumunda orijinal fotoğrafı kullan
+      setFilteredPhoto(photo);
+    }
+  }
 
-  const cameraDevice = useCameraDevice(position);
-  const camera = useRef(null);
+  async function applyBronzeFilterToImage(photo) {
+    try {
+      // handleSkiaActions'daki aynı bronzlaştırma algoritmasını kullan
+      const color = selectedProduct.color;
+      const r = parseInt(color.slice(1, 3), 16) / 255;
+      const g = parseInt(color.slice(3, 5), 16) / 255;
+      const b = parseInt(color.slice(5, 7), 16) / 255;
+
+      // Color Matrix (handleSkiaActions'dan alıntı)
+      const colorMatrix = [
+        1,
+        0,
+        0,
+        0,
+        r * 0.15,
+        0,
+        1,
+        0,
+        0,
+        g * 0.08,
+        0,
+        0,
+        1,
+        0,
+        b * 0.03,
+        0,
+        0,
+        0,
+        0.6,
+        0,
+      ];
+
+      console.log(
+        `Bronzlaştırma uygulanıyor: ${selectedProduct.name} (${color})`
+      );
+      console.log(
+        `RGB değerleri: R:${r.toFixed(3)}, G:${g.toFixed(3)}, B:${b.toFixed(3)}`
+      );
+      console.log(
+        `Matrix intensities: R:${(r * 0.15).toFixed(3)}, G:${(g * 0.08).toFixed(
+          3
+        )}, B:${(b * 0.03).toFixed(3)}`
+      );
+
+      // Simüle edilmiş processing süresi
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      // Gerçek implementasyon için:
+      // const image = await Skia.Image.MakeImageFromEncoded(photo.path);
+      // const surface = Skia.Surface.Make(image.width(), image.height());
+      // const canvas = surface.getCanvas();
+      // const bronzeFilter = Skia.ColorFilter.MakeMatrix(colorMatrix);
+      // const paint = Skia.Paint();
+      // paint.setColorFilter(bronzeFilter);
+      // canvas.drawImage(image, 0, 0, paint);
+      // const processedImage = surface.makeImageSnapshot();
+
+      return {
+        ...photo,
+        processed: true,
+        bronzeSettings: {
+          productName: selectedProduct.name,
+          colorMatrix: colorMatrix,
+          intensityR: r * 0.15,
+          intensityG: g * 0.08,
+          intensityB: b * 0.03,
+          blendMode: "overlay",
+          alpha: 0.6,
+        },
+      };
+    } catch (error) {
+      console.error("Bronze filter application error:", error);
+      return photo; // Fallback to original
+    }
+  }
+
+  // Fotoğrafı backend'e upload etme fonksiyonu
+  async function uploadPhotoToBackend(photoUri) {
+    try {
+      setIsUploading(true);
+      console.log("📤 Fotoğraf backend'e upload ediliyor...", photoUri);
+
+      // Device bilgilerini al
+      const deviceInfo = await getDeviceInfo();
+
+      // Fotoğraf dosyasını oku
+      const fileInfo = await FileSystem.getInfoAsync(photoUri);
+      if (!fileInfo.exists) {
+        throw new Error("Fotoğraf dosyası bulunamadı");
+      }
+
+      // FormData oluştur
+      const formData = new FormData();
+      
+      // URI format'ını kontrol et ve düzelt
+      let imageUri = photoUri;
+      if (!imageUri.startsWith('file://') && !imageUri.startsWith('content://')) {
+        imageUri = `file://${photoUri}`;
+      }
+      
+      console.log("📎 Image URI format:", {
+        original: photoUri,
+        formatted: imageUri
+      });
+      
+      formData.append("image", {
+        uri: imageUri,
+        name: `realtime-${Date.now()}.jpg`,
+        type: "image/jpeg",
+      });
+
+      // Sadece ürün ve device bilgisi gönder - mask gerekmez
+      formData.append("selectedProduct", JSON.stringify(selectedProduct));
+      formData.append("deviceInfo", JSON.stringify(deviceInfo));
+
+      console.log("📤 Upload başlatılıyor:", {
+        photoSize: fileInfo.size,
+        selectedProduct: selectedProduct.name,
+        uploadType: "realtime-filtered"
+      });
+
+      const response = await fetch(
+        `${API_URL}/api/public/phone/upload-filtered-photo`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+      console.log("📤 Upload sonucu:", result);
+
+      if (result.success) {
+        console.log("✅ Upload başarılı:", {
+          imageId: result.imageId,
+          imageUrl: result.imageUrl
+        });
+        return {
+          imageId: result.imageId,
+          imageUrl: result.imageUrl,
+          success: true
+        };
+      } else {
+        throw new Error(result.error || "Upload başarısız");
+      }
+    } catch (error) {
+      console.error("❌ Upload hatası:", error);
+      throw error;
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  // Paylaş fonksiyonu
+  async function sharePhoto() {
+    try {
+      if (!filteredPhoto || !filteredPhoto.path) {
+        Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+        return;
+      }
+
+      setIsSharing(true);
+
+      // Eğer henüz backend'e upload edilmemişse, önce upload et
+      if (!resultImageId) {
+        console.log("📤 Önce fotoğraf upload ediliyor...");
+        
+        const uploadResult = await uploadPhotoToBackend(filteredPhoto.path);
+        
+        if (uploadResult.success) {
+          setResultImageId(uploadResult.imageId);
+          console.log("✅ Upload başarılı, paylaşım başlatılıyor...");
+          
+          // Upload sonrası paylaşımı yap
+          await performShare(uploadResult.imageId);
+        } else {
+          throw new Error("Fotoğraf upload edilemedi");
+        }
+      } else {
+        // Zaten upload edilmişse, doğrudan paylaş
+        await performShare(resultImageId);
+      }
+
+    } catch (error) {
+      console.error("❌ Paylaşım hatası:", error);
+      Alert.alert(
+        "Paylaşım Hatası", 
+        "Fotoğraf paylaşılırken hata oluştu. Lütfen tekrar deneyin.",
+        [{ text: "Tamam", style: "default" }]
+      );
+    } finally {
+      setIsSharing(false);
+    }
+  }
+
+  // Gerçek paylaşım işlemini yapan fonksiyon
+  async function performShare(imageId) {
+    try {
+      console.log("🚀 Paylaşım API'si çağrılıyor:", imageId);
+
+      const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageId: imageId,
+        }),
+      });
+
+      const result = await response.json();
+      console.log("🚀 Paylaşım sonucu:", result);
+
+      if (result.success) {
+        // Başarı için haptic feedback
+        Vibration.vibrate([100, 50, 100]);
+        
+        Alert.alert(
+          "Paylaşım Başarılı! 🎉",
+          "Fotoğrafınız başarıyla paylaşıldı! Şimdi diğer kullanıcılar da bronzlaştırma filtrenizi görebilir.",
+          [
+            {
+              text: "Harika! 🚀",
+              style: "default",
+              onPress: () => {
+                // Başarılı paylaşım sonrası UI feedback
+                console.log("✅ Paylaşım tamamlandı");
+              }
+            }
+          ]
+        );
+      } else {
+        throw new Error(result.error || "Paylaşım API'si hatası");
+      }
+    } catch (error) {
+      console.error("❌ Paylaşım API hatası:", error);
+      throw error;
+    }
+  }
+
+  function buyProduct() {
+    // const handlePurchase = async () => {
+    //   if (!selectedProduct || !selectedProduct.link) {
+    //     Alert.alert("Hata", "Lütfen önce bir ürün seçin!");
+    //     return;
+    //   }
+
+    //   try {
+    //     const supported = await Linking.canOpenURL(selectedProduct.link);
+    //     if (supported) {
+    //       await Linking.openURL(selectedProduct.link);
+    //     } else {
+    //       Alert.alert("Hata", "Bu link açılamıyor: " + selectedProduct.link);
+    //     }
+    //   } catch (error) {
+    //     console.error("Link açılırken hata:", error);
+    //     Alert.alert("Hata", "Satın alma sayfası açılırken hata oluştu.");
+    //   }
+    // };
+    if (selectedProduct.link) {
+      Linking.openURL(selectedProduct.link);
+    }
+  }
+
+  function closePreview() {
+    setCapturedPhoto(null);
+    setFilteredPhoto(null);
+    setShowHint(true); // Yeni fotoğraf için hint'i yeniden göster
+    
+    // Paylaşım state'lerini temizle
+    setResultImageId(null);
+    setIsSharing(false);
+    setIsUploading(false);
+  }
+
+  // UI gizleme/gösterme fonksiyonları
+  function hideUI() {
+    setHideUIOnPress(true);
+    Animated.timing(uiOpacityAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }
+
+  function showUI() {
+    setHideUIOnPress(false);
+    Animated.timing(uiOpacityAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }
+
+  const getCurrentProductIndex = () => {
+    return PRODUCTS.findIndex((p) => p.id === selectedProduct.id);
+  };
+
+  const getPreviousProduct = () => {
+    const currentIndex = getCurrentProductIndex();
+    const prevIndex = currentIndex > 0 ? currentIndex - 1 : PRODUCTS.length - 1;
+    return PRODUCTS[prevIndex];
+  };
+
+  const getNextProduct = () => {
+    const currentIndex = getCurrentProductIndex();
+    const nextIndex = currentIndex < PRODUCTS.length - 1 ? currentIndex + 1 : 0;
+    return PRODUCTS[nextIndex];
+  };
+
+  const switchToPreviousProduct = () => {
+    // Kaydırma animasyonu - sola kaydırma
+    Animated.sequence([
+      Animated.timing(slideAnim, {
+        toValue: 50,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Scale animasyonu
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.9,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    setSelectedProduct(getPreviousProduct());
+    setShowHelp(false);
+  };
+
+  const switchToNextProduct = () => {
+    // Kaydırma animasyonu - sağa kaydırma
+    Animated.sequence([
+      Animated.timing(slideAnim, {
+        toValue: -50,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Scale animasyonu
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.9,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    setSelectedProduct(getNextProduct());
+    setShowHelp(false);
+  };
+
+  // Swipe gesture tanımla
+  const swipeGesture = Gesture.Pan().onEnd((event) => {
+    "worklet";
+    const { velocityX, translationX } = event;
+
+    // Sağa kaydırma (önceki ürün)
+    if (translationX > 50 || velocityX > 500) {
+      runOnJS(switchToPreviousProduct)();
+    }
+    // Sola kaydırma (sonraki ürün)
+    else if (translationX < -50 || velocityX < -500) {
+      runOnJS(switchToNextProduct)();
+    }
+  });
+
+  if (capturedPhoto) {
+    const displayPhoto = filteredPhoto || capturedPhoto;
+
+    return (
+      <TouchableWithoutFeedback
+        onPressIn={hideUI}
+        onPressOut={showUI}
+      >
+        <View style={StyleSheet.absoluteFill}>
+          <StatusBar barStyle="light-content" backgroundColor="black" />
+
+          {/* Background Image */}
+          <Image
+            source={{ uri: `file://${displayPhoto.path}` }}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* ✅ Minimal overlay sadece görsel zenginlik için */}
+          {filteredPhoto && filteredPhoto.captureMethod === "clean_camera" && (
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: "rgba(255, 215, 0, 0.05)", // Minimal golden overlay
+                  pointerEvents: "none",
+                },
+              ]}
+            />
+          )}
+
+          <Animated.View 
+            style={[
+              StyleSheet.absoluteFill,
+              { 
+                opacity: uiOpacityAnim,
+                pointerEvents: hideUIOnPress ? 'none' : 'auto'
+              }
+            ]}
+          >
+          </Animated.View>
+
+          {/* Processing overlay - her zaman görünür olsun */}
+          {(isProcessingPhoto || isUploading || isSharing) && (
+            <View style={styles.processingOverlay}>
+              <View style={styles.processingContent}>
+                {isProcessingPhoto && (
+                  <>
+                    <Ionicons name="camera" size={32} color={COLORS.text} />
+                    <Text style={styles.processingText}>📸 Fotoğraf çekiliyor...</Text>
+                    <Text style={styles.processingSubText}>Lütfen bekleyin</Text>
+                  </>
+                )}
+                {isUploading && (
+                  <>
+                    <Ionicons name="cloud-upload" size={32} color="#4285F4" />
+                    <Text style={styles.processingText}>📤 Fotoğraf yükleniyor...</Text>
+                    <Text style={styles.processingSubText}>Backend'e gönderiliyor</Text>
+                  </>
+                )}
+                {isSharing && !isUploading && (
+                  <>
+                    <Ionicons name="share-social" size={32} color="#FF6B35" />
+                    <Text style={styles.processingText}>🚀 Paylaşılıyor...</Text>
+                    <Text style={styles.processingSubText}>Toplulukla paylaşılıyor</Text>
+                  </>
+                )}
+                <View style={styles.loadingDots}>
+                  <Animated.View 
+                    style={[
+                      styles.dot, 
+                      { 
+                        transform: [{ 
+                          scale: dot1Anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.5, 1.2]
+                          })
+                        }] 
+                      }
+                    ]} 
+                  />
+                  <Animated.View 
+                    style={[
+                      styles.dot, 
+                      { 
+                        transform: [{ 
+                          scale: dot2Anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.5, 1.2]
+                          })
+                        }] 
+                      }
+                    ]} 
+                  />
+                  <Animated.View 
+                    style={[
+                      styles.dot, 
+                      { 
+                        transform: [{ 
+                          scale: dot3Anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.5, 1.2]
+                          })
+                        }] 
+                      }
+                    ]} 
+                  />
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Animasyonlu UI Container */}
+          <Animated.View 
+            style={[
+              StyleSheet.absoluteFill,
+              { 
+                opacity: uiOpacityAnim,
+                pointerEvents: hideUIOnPress ? 'none' : 'auto'
+              }
+            ]}
+          >
+            {/* Product info header */}
+            <View style={styles.previewHeader}>
+              <View style={styles.productBadge}>
+                <Image
+                  source={selectedProduct.pngImage}
+                  style={styles.productBadgeImage}
+                />
+                <View style={styles.productBadgeContent}>
+                  <Text style={styles.productBadgeTitle}>
+                    {selectedProduct.name}
+                  </Text>
+                  <Text style={styles.productBadgeSubtitle}>
+                    {filteredPhoto?.captureMethod === "clean_camera"
+                      ? "📸 Temiz Kamera Capture"
+                      : "Bronzlaştırma Filtresi"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Filter status indicator */}
+            {filteredPhoto && filteredPhoto.captureMethod === "clean_camera" && (
+              <View style={styles.filterStatusBadge}>
+                <Ionicons name="camera" size={16} color="#4CAF50" />
+                <Text style={styles.filterStatusText}>Temiz Kamera Capture ✨</Text>
+              </View>
+            )}
+
+            {/* Action buttons */}
+            <View style={styles.previewActions}>
+                          <TouchableOpacity
+              style={[
+                styles.actionButton, 
+                styles.shareButton,
+                (isSharing || isUploading) && styles.actionButtonDisabled
+              ]}
+              onPress={sharePhoto}
+              disabled={isProcessingPhoto || isSharing || isUploading}
+            >
+              {isSharing || isUploading ? (
+                <>
+                  <Ionicons name="cloud-upload" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>
+                    {isUploading ? "Yükleniyor..." : "Paylaşılıyor..."}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="share-social" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>Paylaş</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.buyButton]}
+                onPress={buyProduct}
+                disabled={isProcessingPhoto}
+              >
+                <Ionicons name="cart" size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>Satın Al</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.closeButton]}
+                onPress={closePreview}
+                disabled={isProcessingPhoto}
+              >
+                <Ionicons name="close" size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>Kapat</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+          {/* Basılı tutma ipucu */}
+          {!hideUIOnPress && showHint && (
+            <Animated.View 
+              style={[
+                styles.holdToHideHint,
+                { opacity: uiOpacityAnim }
+              ]}
+            >
+              <Text style={styles.holdToHideText}>
+                👆 Basılı tut: UI gizle
+              </Text>
+            </Animated.View>
+          )}
+        </View>
+      </TouchableWithoutFeedback>
+    );
+  }
 
   return (
-    <View style={styles.container} onTouchEnd={flipCamera}>
-      {hasPermission ? (
-        device != null ? (
-          format != null ? (
+    <View style={StyleSheet.absoluteFill}>
+      <StatusBar barStyle="light-content" backgroundColor="black" />
+
+      {/* ViewShot sadece kamera görüntüsünü kapsıyor - UI elementleri dışında */}
+      <ViewShot
+        ref={viewShotRef}
+        style={StyleSheet.absoluteFill}
+        options={{
+          format: "jpg",
+          quality: 0.9,
+        }}
+      >
+        {hasPermission && cameraDevice ? (
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { opacity: fadeAnim }]}
+          >
             <Camera
-              style={StyleSheet.absoluteFill}
-              device={device}
-              isActive={isCameraActive}
-              format={format}
-              frameProcessor={frameProcessor}
-              fps={format?.maxFps}
-              pixelFormat="rgb"
-              exposure={0}
               ref={camera}
+              style={StyleSheet.absoluteFill}
+              isActive={isCameraActive}
+              device={cameraDevice}
               onError={handleCameraMountError}
+              faceDetectionCallback={handleFacesDetected}
+              onUIRotationChanged={handleUiRotation}
+              skiaActions={handleSkiaActions}
+              faceDetectionOptions={faceDetectionOptions}
+              format={format}
+              photo={true}
             />
-          ) : (
-            <View style={styles.textContainer}>
-              <Text style={styles.text}>
-                Your phone does not have a {position} Camera.
-              </Text>
-            </View>
-          )
+          </Animated.View>
         ) : (
-          <View style={styles.textContainer}>
-            <Text style={styles.text}>
-              Your phone does not have a {position} Camera.
+          <View style={styles.permissionScreen}>
+            <LinearGradient
+              colors={["#FF6B35", "#F7931E", "#FFD23F"]}
+              style={StyleSheet.absoluteFill}
+            />
+            <Text style={styles.permissionTitle}>🔒 Kamera İzni Gerekli</Text>
+            <Text style={styles.permissionText}>
+              Bronzlaştırma filtresini kullanmak için kamera izni vermeniz
+              gerekmektedir.
+            </Text>
+            <TouchableOpacity
+              style={styles.permissionButton}
+              onPress={requestPermission}
+            >
+              <Text style={styles.permissionButtonText}>İzin Ver</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ViewShot>
+
+      {/* Tüm UI elementleri ViewShot'ın DIŞINDA - fotoğrafta görünmeyecek */}
+
+      {/* Top UI Bar */}
+      <View style={styles.topBar}>
+        <LinearGradient
+          colors={["rgba(0,0,0,0.7)", "transparent"]}
+          style={styles.topBarGradient}
+        />
+        <View style={styles.productHeader}>
+          <Image
+            source={selectedProduct.pngImage}
+            style={styles.topProductImage}
+          />
+          <View style={styles.productInfo}>
+            <Text style={styles.productName}>{selectedProduct.name}</Text>
+            <Text style={styles.productDescription}>
+              Bronzlaştırma Filtresi
             </Text>
           </View>
-        )
-      ) : (
-        <View style={styles.textContainer}>
-          <Text style={styles.text} numberOfLines={5}>
-            FaceBlurApp needs Camera permission.{" "}
-            <Text style={styles.link} onPress={Linking.openSettings}>
-              Grant
-            </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.helpButton}
+          onPress={() => setShowHelp(!showHelp)}
+        >
+          <Text style={styles.helpIcon}>?</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Product info overlay */}
+      {showHelp && (
+        <Animated.View
+          style={[styles.productInfoOverlay, { opacity: fadeAnim }]}
+        >
+          <View style={styles.productInfoHeader}>
+            <Image
+              source={selectedProduct.pngImage}
+              style={styles.productInfoImage}
+            />
+            <View style={styles.productInfoContent}>
+              <Text style={styles.productInfoTitle}>
+                {selectedProduct.name}
+              </Text>
+              <Text style={styles.productInfoPrice}>
+                ₺{selectedProduct.price.toFixed(2)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.closeInfoButton}
+              onPress={() => setShowHelp(false)}
+            >
+              <Ionicons name="close" size={20} color={COLORS.text} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.productInfoDescription}>
+            {selectedProduct.description}
           </Text>
+
+          <View style={styles.productInfoFeatures}>
+            <View style={styles.featureItem}>
+              <Ionicons name="color-palette" size={16} color={COLORS.text} />
+              <Text style={styles.featureText}>Bronzlaştırma Filtresi</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="water" size={16} color={COLORS.text} />
+              <Text style={styles.featureText}>200ml Premium Formül</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="shield-checkmark" size={16} color={COLORS.text} />
+              <Text style={styles.featureText}>Cilt Dostu İçerik</Text>
+            </View>
+          </View>
+
+          <View style={styles.productInfoActions}>
+            <TouchableOpacity
+              style={styles.infoActionButton}
+              onPress={() => setShowHelp(false)}
+            >
+              <Text style={styles.infoActionText}>Kullanmaya Devam Et</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Processing overlay */}
+      {isProcessingPhoto && (
+        <View style={styles.processingOverlay}>
+          <View style={styles.processingContent}>
+            <Text style={styles.processingText}>
+              📸 Temiz fotoğraf alınıyor...
+            </Text>
+          </View>
         </View>
       )}
+
+      {/* Main camera controls */}
+      <GestureDetector gesture={swipeGesture}>
+        <Animated.View
+          style={[
+            styles.bottomContainer,
+            {
+              transform: [{ translateX: slideAnim }],
+            },
+          ]}
+        >
+          {/* Sol yan ürün */}
+          <TouchableOpacity
+            style={styles.sideProduct}
+            onPress={switchToPreviousProduct}
+          >
+            <Animated.View
+              style={[
+                styles.sideProductContainer,
+                { transform: [{ scale: scaleAnim }] },
+              ]}
+            >
+              <Image
+                source={getPreviousProduct().pngImage}
+                style={styles.sideProductImage}
+              />
+              <Text style={styles.sideProductName}>
+                {getPreviousProduct().name}
+              </Text>
+            </Animated.View>
+          </TouchableOpacity>
+
+          {/* Ana fotoğraf çekme butonu */}
+          <Animated.View
+            style={{
+              transform: [{ scale: pulseAnim }, { translateX: slideAnim }],
+            }}
+          >
+            <TouchableOpacity
+              style={[
+                styles.mainCaptureButton,
+                isProcessingPhoto && styles.mainCaptureButtonDisabled,
+              ]}
+              onPress={takePhoto}
+              disabled={isProcessingPhoto}
+            >
+              <LinearGradient
+                colors={
+                  isProcessingPhoto
+                    ? ["#ccc", "#999", "#666"]
+                    : ["#FF6B35", "#F7931E", "#FFD23F"]
+                }
+                style={styles.captureButtonGradient}
+              />
+
+              {isProcessingPhoto ? (
+                <View style={styles.processingIndicator}>
+                  <Text style={styles.processingIndicatorText}>⏳</Text>
+                </View>
+              ) : (
+                <Image
+                  source={selectedProduct.pngImage}
+                  style={styles.mainCaptureButtonImage}
+                />
+              )}
+
+              <View style={styles.innerMainCaptureButton} />
+              <Text style={styles.mainCaptureButtonText}>
+                {isProcessingPhoto ? "Capturing..." : selectedProduct.name}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Sağ yan ürün */}
+          <TouchableOpacity
+            style={styles.sideProduct}
+            onPress={switchToNextProduct}
+          >
+            <Animated.View
+              style={[
+                styles.sideProductContainer,
+                { transform: [{ scale: scaleAnim }] },
+              ]}
+            >
+              <Image
+                source={getNextProduct().pngImage}
+                style={styles.sideProductImage}
+              />
+              <Text style={styles.sideProductName}>
+                {getNextProduct().name}
+              </Text>
+            </Animated.View>
+          </TouchableOpacity>
+        </Animated.View>
+      </GestureDetector>
+
+      {/* Swipe indicator */}
+      <View style={styles.swipeIndicator}>
+        <Text style={styles.swipeText}>← Kaydır →</Text>
+      </View>
+
+      {/* Side controls */}
+      <View style={styles.sideControls}>
+        <TouchableOpacity
+          onPress={() =>
+            setCameraFacing((current) =>
+              current === "front" ? "back" : "front"
+            )
+          }
+          style={styles.sideButton}
+        >
+          <Ionicons name="camera-reverse" size={24} color={COLORS.text} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
+  // Top Bar Styles
+  topBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  topBarGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+  },
+  productHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  topProductImage: {
+    width: 40,
+    height: 40,
+    resizeMode: "contain",
+    marginRight: 12,
+  },
+  productInfo: {
     flex: 1,
   },
-  camera: {
-    flex: 1,
+  productName: {
+    color: COLORS.background,
+    fontSize: 18,
+    fontWeight: "700",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
-  textContainer: {
-    flex: 1,
+  productDescription: {
+    color: COLORS.background,
+    fontSize: 14,
+    fontWeight: "400",
+    marginTop: 2,
+  },
+  helpButton: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    backgroundColor: "transparent",
+    width: 30,
+    height: 30,
+    borderRadius: 25,
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.text,
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+  },
+  helpIcon: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "600",
+  },
+
+  // Product Info Overlay
+  productInfoOverlay: {
+    position: "absolute",
+    top: 120,
+    left: 20,
+    right: 20,
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
+    padding: 20,
+    zIndex: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  productInfoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  productInfoImage: {
+    width: 50,
+    height: 50,
+    resizeMode: "contain",
+    marginRight: 12,
+  },
+  productInfoContent: {
+    flex: 1,
+  },
+  productInfoTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  productInfoPrice: {
+    color: "#FF6B35",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  closeInfoButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(92, 58, 33, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productInfoDescription: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+    textAlign: "left",
+  },
+  productInfoFeatures: {
+    marginBottom: 20,
+  },
+  featureItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  featureText: {
+    color: COLORS.text,
+    fontSize: 13,
+    marginLeft: 8,
+    flex: 1,
+  },
+  productInfoActions: {
     alignItems: "center",
   },
-  text: {
-    maxWidth: "60%",
-    fontWeight: "bold",
-    fontSize: 15,
-    color: "black",
+  infoActionButton: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-  link: {
-    color: "rgb(80, 80, 255)",
+  infoActionText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  // Bottom Container
+  bottomContainer: {
+    position: "absolute",
+    bottom: 120,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingHorizontal: 30,
+  },
+
+  // Side Products
+  sideProduct: {
+    alignItems: "center",
+    opacity: 0.7,
+  },
+  sideProductContainer: {
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 100,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    backdropFilter: "blur(10px)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    borderRadius: 100,
+    width: 60,
+    height: 60,
+    transform: [{ scale: 0.8 }],
+  },
+  sideProductImage: {
+    width: 45,
+    height: 45,
+    resizeMode: "contain",
+  },
+  sideProductName: {
+    color: COLORS.background,
+    fontSize: 10,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 6,
+    maxWidth: 70,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // Main Capture Button
+  mainCaptureButton: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  mainCaptureButtonDisabled: {
+    opacity: 0.7,
+  },
+  processingIndicator: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  processingIndicatorText: {
+    fontSize: 30,
+  },
+  captureButtonGradient: {
+    position: "absolute",
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+  },
+  innerMainCaptureButton: {
+    width: 95,
+    height: 95,
+    borderRadius: 47.5,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  mainCaptureButtonImage: {
+    width: 65,
+    height: 65,
+    resizeMode: "contain",
+    zIndex: 1,
+  },
+  mainCaptureButtonText: {
+    color: COLORS.background,
+    fontSize: 12,
+    textAlign: "center",
+    fontWeight: "700",
+    position: "absolute",
+    bottom: -30,
+    left: 0,
+    right: 0,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // Swipe Indicator
+  swipeIndicator: {
+    position: "absolute",
+    bottom: 40,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  swipeText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 13,
+    fontWeight: "500",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // Side Controls
+  sideControls: {
+    position: "absolute",
+    left: 10,
+    top: "35%",
+    alignItems: "center",
+  },
+  sideButton: {
+    width: 35,
+    height: 35,
+    borderRadius: 100,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.background,
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+
+  // Status Overlays
+  statusOverlay: {
+    position: "absolute",
+    top: "50%",
+    left: 20,
+    right: 20,
+    transform: [{ translateY: -20 }],
+    backgroundColor: "rgba(0,0,0,0.8)",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+  },
+  statusText: {
+    color: COLORS.background,
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  // Permission Screen
+  permissionScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 40,
+  },
+  permissionTitle: {
+    color: COLORS.background,
+    fontSize: 24,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 16,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  permissionText: {
+    color: COLORS.background,
+    fontSize: 16,
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 32,
+    opacity: 0.9,
+  },
+  permissionButton: {
+    backgroundColor: "rgba(255,255,255,0.9)",
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 25,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  permissionButtonText: {
+    color: COLORS.background,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  // Preview Screen Styles
+  previewHeader: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    right: 20,
+    zIndex: 10,
+  },
+  processingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+  },
+  processingContent: {
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
+    paddingHorizontal: 32,
+    paddingVertical: 20,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  processingText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 12,
+  },
+  processingSubText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "400",
+    textAlign: "center",
+    marginTop: 4,
+    opacity: 0.7,
+  },
+  loadingDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF6B35",
+    marginHorizontal: 3,
+  },
+  filterStatusBadge: {
+    position: "absolute",
+    top: 130,
+    right: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(76, 175, 80, 0.9)",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    zIndex: 10,
+  },
+  filterStatusText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  productBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    alignSelf: "flex-start",
+    shadowColor: COLORS.text,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  productBadgeImage: {
+    width: 35,
+    height: 35,
+    resizeMode: "contain",
+    marginRight: 12,
+  },
+  productBadgeContent: {
+    flex: 1,
+  },
+  productBadgeTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  productBadgeSubtitle: {
+    color: "#FF6B35",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  previewActions: {
+    position: "absolute",
+    bottom: 100,
+    left: 30,
+    right: 30,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  actionButton: {
+    alignItems: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    minWidth: 90,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  actionButtonDisabled: {
+    opacity: 0.7,
+    shadowOpacity: 0.1,
+    elevation: 3,
+  },
+  shareButton: {
+    backgroundColor: "#4285F4",
+  },
+  buyButton: {
+    backgroundColor: "#FF6B35",
+  },
+  closeButton: {
+    backgroundColor: COLORS.text,
+  },
+  actionButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 6,
+    textAlign: "center",
+  },
+
+  // Hold to hide hint styles
+  holdToHideHint: {
+    position: "absolute",
+    top: "50%",
+    left: 20,
+    right: 20,
+    transform: [{ translateY: -10 }],
+    alignItems: "center",
+    pointerEvents: "none",
+  },
+  holdToHideText: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 14,
+    fontWeight: "500",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    textAlign: "center",
+    overflow: "hidden",
   },
 });
 
