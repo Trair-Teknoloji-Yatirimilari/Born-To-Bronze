@@ -10,6 +10,9 @@ import {
   Animated,
   StatusBar,
   Linking,
+  Alert,
+  Platform,
+  Vibration,
 } from "react-native";
 import {
   DrawableFrame,
@@ -34,9 +37,87 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import ViewShot from "react-native-view-shot";
+import * as FileSystem from "expo-file-system";
+import DeviceInfo from 'react-native-device-info';
 import { PRODUCTS } from "../constants/products";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../constants/theme";
+
+// API URL Configuration
+const API_URL = __DEV__
+  ? Platform.select({
+      ios: "http://192.168.1.29:3000",
+      android: "http://10.0.2.2:3000",
+    })
+  : "https://your-production-api.com";
+
+// Device bilgilerini toplayan utility fonksiyon
+const getDeviceInfo = async () => {
+  try {
+    const [
+      uniqueId,
+      deviceId,
+      deviceName,
+      brand,
+      deviceType,
+      systemName,
+      systemVersion,
+      userAgent,
+      appVersion,
+      buildNumber,
+      bundleId,
+      isEmulator,
+      isTablet,
+    ] = await Promise.all([
+      DeviceInfo.getUniqueId(),
+      DeviceInfo.getDeviceId(),
+      DeviceInfo.getDeviceName(),
+      DeviceInfo.getBrand(),
+      DeviceInfo.getDeviceType(),
+      DeviceInfo.getSystemName(),
+      DeviceInfo.getSystemVersion(),
+      DeviceInfo.getUserAgent(),
+      DeviceInfo.getVersion(),
+      DeviceInfo.getBuildNumber(),
+      DeviceInfo.getBundleId(),
+      DeviceInfo.isEmulator(),
+      DeviceInfo.isTablet(),
+    ]);
+
+    return {
+      uniqueId,
+      deviceId,
+      deviceName,
+      deviceBrand: brand,
+      deviceType,
+      systemName,
+      systemVersion,
+      userAgent,
+      appVersion,
+      buildNumber,
+      bundleId,
+      isEmulator,
+      isTablet,
+    };
+  } catch (error) {
+    console.error('Device bilgileri alınırken hata:', error);
+    return {
+      uniqueId: null,
+      deviceId: null,
+      deviceName: null,
+      deviceBrand: null,
+      deviceType: null,
+      systemName: Platform.OS,
+      systemVersion: Platform.Version?.toString(),
+      userAgent: null,
+      appVersion: null,
+      buildNumber: null,
+      bundleId: null,
+      isEmulator: false,
+      isTablet: false,
+    };
+  }
+};
 
 function RealTimeScreen() {
   const { width, height } = useWindowDimensions();
@@ -49,6 +130,11 @@ function RealTimeScreen() {
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [hideUIOnPress, setHideUIOnPress] = useState(false);
   const [showHint, setShowHint] = useState(true);
+  
+  // Paylaşım için yeni state'ler
+  const [resultImageId, setResultImageId] = useState(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Animasyonlar
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -56,6 +142,11 @@ function RealTimeScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
+  
+  // Loading dots animasyonları
+  const dot1Anim = useRef(new Animated.Value(0)).current;
+  const dot2Anim = useRef(new Animated.Value(0)).current;
+  const dot3Anim = useRef(new Animated.Value(0)).current;
   const faceDetectionOptions = useRef({
     performanceMode: "fast",
     classificationMode: "all",
@@ -116,6 +207,60 @@ function RealTimeScreen() {
       return () => clearTimeout(timer);
     }
   }, [capturedPhoto, showHint]);
+
+  // Loading dots animasyonu
+  useEffect(() => {
+    if (isProcessingPhoto || isUploading || isSharing) {
+      const animateDotsSequence = () => {
+        const sequence = Animated.stagger(150, [
+          Animated.timing(dot1Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot2Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot3Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]);
+
+        const reset = Animated.parallel([
+          Animated.timing(dot1Anim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot2Anim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot3Anim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]);
+
+        Animated.loop(
+          Animated.sequence([sequence, reset]),
+          { iterations: -1 }
+        ).start();
+      };
+
+      animateDotsSequence();
+    } else {
+      dot1Anim.setValue(0);
+      dot2Anim.setValue(0);
+      dot3Anim.setValue(0);
+    }
+  }, [isProcessingPhoto, isUploading, isSharing]);
 
   function handleUiRotation(rotation) {}
 
@@ -211,7 +356,7 @@ function RealTimeScreen() {
     bronzePaint.setBlendMode(BlendMode.Overlay);
 
     // Kenarları yumuşatmak için blur
-    const blurRadius = 8;
+    const blurRadius = 6;
     const blurFilter = Skia.ImageFilter.MakeBlur(
       blurRadius,
       blurRadius,
@@ -386,6 +531,170 @@ function RealTimeScreen() {
     }
   }
 
+  // Fotoğrafı backend'e upload etme fonksiyonu
+  async function uploadPhotoToBackend(photoUri) {
+    try {
+      setIsUploading(true);
+      console.log("📤 Fotoğraf backend'e upload ediliyor...", photoUri);
+
+      // Device bilgilerini al
+      const deviceInfo = await getDeviceInfo();
+
+      // Fotoğraf dosyasını oku
+      const fileInfo = await FileSystem.getInfoAsync(photoUri);
+      if (!fileInfo.exists) {
+        throw new Error("Fotoğraf dosyası bulunamadı");
+      }
+
+      // FormData oluştur
+      const formData = new FormData();
+      
+      // URI format'ını kontrol et ve düzelt
+      let imageUri = photoUri;
+      if (!imageUri.startsWith('file://') && !imageUri.startsWith('content://')) {
+        imageUri = `file://${photoUri}`;
+      }
+      
+      console.log("📎 Image URI format:", {
+        original: photoUri,
+        formatted: imageUri
+      });
+      
+      formData.append("image", {
+        uri: imageUri,
+        name: `realtime-${Date.now()}.jpg`,
+        type: "image/jpeg",
+      });
+
+      // Sadece ürün ve device bilgisi gönder - mask gerekmez
+      formData.append("selectedProduct", JSON.stringify(selectedProduct));
+      formData.append("deviceInfo", JSON.stringify(deviceInfo));
+
+      console.log("📤 Upload başlatılıyor:", {
+        photoSize: fileInfo.size,
+        selectedProduct: selectedProduct.name,
+        uploadType: "realtime-filtered"
+      });
+
+      const response = await fetch(
+        `${API_URL}/api/public/phone/upload-filtered-photo`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+      console.log("📤 Upload sonucu:", result);
+
+      if (result.success) {
+        console.log("✅ Upload başarılı:", {
+          imageId: result.imageId,
+          imageUrl: result.imageUrl
+        });
+        return {
+          imageId: result.imageId,
+          imageUrl: result.imageUrl,
+          success: true
+        };
+      } else {
+        throw new Error(result.error || "Upload başarısız");
+      }
+    } catch (error) {
+      console.error("❌ Upload hatası:", error);
+      throw error;
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  // Paylaş fonksiyonu
+  async function sharePhoto() {
+    try {
+      if (!filteredPhoto || !filteredPhoto.path) {
+        Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+        return;
+      }
+
+      setIsSharing(true);
+
+      // Eğer henüz backend'e upload edilmemişse, önce upload et
+      if (!resultImageId) {
+        console.log("📤 Önce fotoğraf upload ediliyor...");
+        
+        const uploadResult = await uploadPhotoToBackend(filteredPhoto.path);
+        
+        if (uploadResult.success) {
+          setResultImageId(uploadResult.imageId);
+          console.log("✅ Upload başarılı, paylaşım başlatılıyor...");
+          
+          // Upload sonrası paylaşımı yap
+          await performShare(uploadResult.imageId);
+        } else {
+          throw new Error("Fotoğraf upload edilemedi");
+        }
+      } else {
+        // Zaten upload edilmişse, doğrudan paylaş
+        await performShare(resultImageId);
+      }
+
+    } catch (error) {
+      console.error("❌ Paylaşım hatası:", error);
+      Alert.alert(
+        "Paylaşım Hatası", 
+        "Fotoğraf paylaşılırken hata oluştu. Lütfen tekrar deneyin.",
+        [{ text: "Tamam", style: "default" }]
+      );
+    } finally {
+      setIsSharing(false);
+    }
+  }
+
+  // Gerçek paylaşım işlemini yapan fonksiyon
+  async function performShare(imageId) {
+    try {
+      console.log("🚀 Paylaşım API'si çağrılıyor:", imageId);
+
+      const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageId: imageId,
+        }),
+      });
+
+      const result = await response.json();
+      console.log("🚀 Paylaşım sonucu:", result);
+
+      if (result.success) {
+        // Başarı için haptic feedback
+        Vibration.vibrate([100, 50, 100]);
+        
+        Alert.alert(
+          "Paylaşım Başarılı! 🎉",
+          "Fotoğrafınız başarıyla paylaşıldı! Şimdi diğer kullanıcılar da bronzlaştırma filtrenizi görebilir.",
+          [
+            {
+              text: "Harika! 🚀",
+              style: "default",
+              onPress: () => {
+                // Başarılı paylaşım sonrası UI feedback
+                console.log("✅ Paylaşım tamamlandı");
+              }
+            }
+          ]
+        );
+      } else {
+        throw new Error(result.error || "Paylaşım API'si hatası");
+      }
+    } catch (error) {
+      console.error("❌ Paylaşım API hatası:", error);
+      throw error;
+    }
+  }
+
   function buyProduct() {
     // const handlePurchase = async () => {
     //   if (!selectedProduct || !selectedProduct.link) {
@@ -414,6 +723,11 @@ function RealTimeScreen() {
     setCapturedPhoto(null);
     setFilteredPhoto(null);
     setShowHint(true); // Yeni fotoğraf için hint'i yeniden göster
+    
+    // Paylaşım state'lerini temizle
+    setResultImageId(null);
+    setIsSharing(false);
+    setIsUploading(false);
   }
 
   // UI gizleme/gösterme fonksiyonları
@@ -574,10 +888,71 @@ function RealTimeScreen() {
           </Animated.View>
 
           {/* Processing overlay - her zaman görünür olsun */}
-          {isProcessingPhoto && (
+          {(isProcessingPhoto || isUploading || isSharing) && (
             <View style={styles.processingOverlay}>
               <View style={styles.processingContent}>
-                <Text style={styles.processingText}>📸 Capture ediliyor...</Text>
+                {isProcessingPhoto && (
+                  <>
+                    <Ionicons name="camera" size={32} color={COLORS.text} />
+                    <Text style={styles.processingText}>📸 Fotoğraf çekiliyor...</Text>
+                    <Text style={styles.processingSubText}>Lütfen bekleyin</Text>
+                  </>
+                )}
+                {isUploading && (
+                  <>
+                    <Ionicons name="cloud-upload" size={32} color="#4285F4" />
+                    <Text style={styles.processingText}>📤 Fotoğraf yükleniyor...</Text>
+                    <Text style={styles.processingSubText}>Backend'e gönderiliyor</Text>
+                  </>
+                )}
+                {isSharing && !isUploading && (
+                  <>
+                    <Ionicons name="share-social" size={32} color="#FF6B35" />
+                    <Text style={styles.processingText}>🚀 Paylaşılıyor...</Text>
+                    <Text style={styles.processingSubText}>Toplulukla paylaşılıyor</Text>
+                  </>
+                )}
+                <View style={styles.loadingDots}>
+                  <Animated.View 
+                    style={[
+                      styles.dot, 
+                      { 
+                        transform: [{ 
+                          scale: dot1Anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.5, 1.2]
+                          })
+                        }] 
+                      }
+                    ]} 
+                  />
+                  <Animated.View 
+                    style={[
+                      styles.dot, 
+                      { 
+                        transform: [{ 
+                          scale: dot2Anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.5, 1.2]
+                          })
+                        }] 
+                      }
+                    ]} 
+                  />
+                  <Animated.View 
+                    style={[
+                      styles.dot, 
+                      { 
+                        transform: [{ 
+                          scale: dot3Anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.5, 1.2]
+                          })
+                        }] 
+                      }
+                    ]} 
+                  />
+                </View>
               </View>
             </View>
           )}
@@ -622,14 +997,29 @@ function RealTimeScreen() {
 
             {/* Action buttons */}
             <View style={styles.previewActions}>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.shareButton]}
-                onPress={() => {}}
-                disabled={isProcessingPhoto}
-              >
-                <Ionicons name="share-social" size={20} color="#fff" />
-                <Text style={styles.actionButtonText}>Paylaş</Text>
-              </TouchableOpacity>
+                          <TouchableOpacity
+              style={[
+                styles.actionButton, 
+                styles.shareButton,
+                (isSharing || isUploading) && styles.actionButtonDisabled
+              ]}
+              onPress={sharePhoto}
+              disabled={isProcessingPhoto || isSharing || isUploading}
+            >
+              {isSharing || isUploading ? (
+                <>
+                  <Ionicons name="cloud-upload" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>
+                    {isUploading ? "Yükleniyor..." : "Paylaşılıyor..."}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="share-social" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>Paylaş</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.actionButton, styles.buyButton]}
@@ -1332,6 +1722,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
+    marginTop: 12,
+  },
+  processingSubText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "400",
+    textAlign: "center",
+    marginTop: 4,
+    opacity: 0.7,
+  },
+  loadingDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF6B35",
+    marginHorizontal: 3,
   },
   filterStatusBadge: {
     position: "absolute",
@@ -1405,6 +1817,11 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
+  actionButtonDisabled: {
+    opacity: 0.7,
+    shadowOpacity: 0.1,
+    elevation: 3,
+  },
   shareButton: {
     backgroundColor: "#4285F4",
   },
@@ -1419,6 +1836,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginTop: 6,
+    textAlign: "center",
   },
 
   // Hold to hide hint styles
