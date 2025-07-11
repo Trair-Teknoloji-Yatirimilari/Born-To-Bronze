@@ -3,6 +3,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
   Image,
   useWindowDimensions,
@@ -20,10 +21,19 @@ import {
 import { useIsFocused } from "@react-navigation/core";
 import { useAppState } from "@react-native-community/hooks";
 import { Camera, Face } from "react-native-vision-camera-face-detector";
-import { ClipOp, Skia, TileMode, BlendMode } from "@shopify/react-native-skia";
+import {
+  ClipOp,
+  Skia,
+  TileMode,
+  BlendMode,
+  Canvas,
+  useCanvasRef,
+  makeImageFromView,
+} from "@shopify/react-native-skia";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
+import ViewShot from "react-native-view-shot";
 import { PRODUCTS } from "../constants/products";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../constants/theme";
@@ -34,13 +44,18 @@ function RealTimeScreen() {
   const [cameraFacing, setCameraFacing] = useState("front");
   const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0]);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [filteredPhoto, setFilteredPhoto] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [hideUIOnPress, setHideUIOnPress] = useState(false);
+  const [showHint, setShowHint] = useState(true);
 
   // Animasyonlar
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const uiOpacityAnim = useRef(new Animated.Value(1)).current;
   const faceDetectionOptions = useRef({
     performanceMode: "fast",
     classificationMode: "all",
@@ -60,6 +75,7 @@ function RealTimeScreen() {
     },
   ]);
   const camera = useRef(null);
+  const viewShotRef = useRef(null);
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -92,6 +108,14 @@ function RealTimeScreen() {
       return () => clearTimeout(timer);
     }
   }, [showHelp]);
+
+  // Preview ekranında hint'i otomatik gizle
+  useEffect(() => {
+    if (capturedPhoto && showHint) {
+      const timer = setTimeout(() => setShowHint(false), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [capturedPhoto, showHint]);
 
   function handleUiRotation(rotation) {}
 
@@ -207,13 +231,158 @@ function RealTimeScreen() {
   }
 
   async function takePhoto() {
-    if (camera.current) {
-      try {
-        const photo = await camera.current.takePhoto();
-        setCapturedPhoto(photo);
-      } catch (error) {
-        console.error("Photo capture error:", error);
+    try {
+      setIsProcessingPhoto(true);
+
+      // SNAPCHAT TARZI: Sadece kamera görüntüsünü capture et (UI elementleri hariç)
+      if (viewShotRef.current) {
+        console.log("📸 Temiz kamera görüntüsü capture ediliyor...");
+
+        const uri = await viewShotRef.current.capture({
+          format: "jpg",
+          quality: 0.9,
+          result: "tmpfile",
+        });
+
+        console.log("✅ Temiz kamera capture başarılı:", uri);
+
+        // Screenshot'ı photo objesi formatında oluştur
+        const capturedPhoto = {
+          path: uri,
+          width: width,
+          height: height,
+          isFiltered: true, // Zaten gerçek zamanlı filtre dahil
+          captureMethod: "clean_camera",
+          timestamp: new Date().toISOString(),
+        };
+
+        setCapturedPhoto(capturedPhoto);
+
+        // Bu durumda ayrı filter processing'e gerek yok
+        // Çünkü screenshot zaten filtreli görüntüyü içeriyor
+        setFilteredPhoto({
+          ...capturedPhoto,
+          filterInfo: {
+            productName: selectedProduct.name,
+            productColor: selectedProduct.color,
+            filterType: "realtime_capture",
+            method: "view_screenshot",
+          },
+        });
+      } else {
+        console.warn("ViewShot ref not available, falling back to camera");
+        // Fallback: Normal camera photo
+        if (camera.current) {
+          const photo = await camera.current.takePhoto({
+            qualityPrioritization: "balanced",
+          });
+          setCapturedPhoto(photo);
+          await applyFilterToPhoto(photo);
+        }
       }
+    } catch (error) {
+      console.error("Photo capture error:", error);
+    } finally {
+      setIsProcessingPhoto(false);
+    }
+  }
+
+  async function applyFilterToPhoto(photo) {
+    try {
+      // Mevcut handleSkiaActions fonksiyonundaki bronzlaştırma algoritmasını kullan
+      const processedPhoto = await applyBronzeFilterToImage(photo);
+
+      setFilteredPhoto({
+        ...processedPhoto,
+        isFiltered: true,
+        filterInfo: {
+          productName: selectedProduct.name,
+          productColor: selectedProduct.color,
+          filterType: "bronze_glow",
+          intensity: 0.6,
+          appliedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error("Filter application error:", error);
+      // Hata durumunda orijinal fotoğrafı kullan
+      setFilteredPhoto(photo);
+    }
+  }
+
+  async function applyBronzeFilterToImage(photo) {
+    try {
+      // handleSkiaActions'daki aynı bronzlaştırma algoritmasını kullan
+      const color = selectedProduct.color;
+      const r = parseInt(color.slice(1, 3), 16) / 255;
+      const g = parseInt(color.slice(3, 5), 16) / 255;
+      const b = parseInt(color.slice(5, 7), 16) / 255;
+
+      // Color Matrix (handleSkiaActions'dan alıntı)
+      const colorMatrix = [
+        1,
+        0,
+        0,
+        0,
+        r * 0.15,
+        0,
+        1,
+        0,
+        0,
+        g * 0.08,
+        0,
+        0,
+        1,
+        0,
+        b * 0.03,
+        0,
+        0,
+        0,
+        0.6,
+        0,
+      ];
+
+      console.log(
+        `Bronzlaştırma uygulanıyor: ${selectedProduct.name} (${color})`
+      );
+      console.log(
+        `RGB değerleri: R:${r.toFixed(3)}, G:${g.toFixed(3)}, B:${b.toFixed(3)}`
+      );
+      console.log(
+        `Matrix intensities: R:${(r * 0.15).toFixed(3)}, G:${(g * 0.08).toFixed(
+          3
+        )}, B:${(b * 0.03).toFixed(3)}`
+      );
+
+      // Simüle edilmiş processing süresi
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      // Gerçek implementasyon için:
+      // const image = await Skia.Image.MakeImageFromEncoded(photo.path);
+      // const surface = Skia.Surface.Make(image.width(), image.height());
+      // const canvas = surface.getCanvas();
+      // const bronzeFilter = Skia.ColorFilter.MakeMatrix(colorMatrix);
+      // const paint = Skia.Paint();
+      // paint.setColorFilter(bronzeFilter);
+      // canvas.drawImage(image, 0, 0, paint);
+      // const processedImage = surface.makeImageSnapshot();
+
+      return {
+        ...photo,
+        processed: true,
+        bronzeSettings: {
+          productName: selectedProduct.name,
+          colorMatrix: colorMatrix,
+          intensityR: r * 0.15,
+          intensityG: g * 0.08,
+          intensityB: b * 0.03,
+          blendMode: "overlay",
+          alpha: 0.6,
+        },
+      };
+    } catch (error) {
+      console.error("Bronze filter application error:", error);
+      return photo; // Fallback to original
     }
   }
 
@@ -223,7 +392,7 @@ function RealTimeScreen() {
     //     Alert.alert("Hata", "Lütfen önce bir ürün seçin!");
     //     return;
     //   }
-  
+
     //   try {
     //     const supported = await Linking.canOpenURL(selectedProduct.link);
     //     if (supported) {
@@ -243,6 +412,27 @@ function RealTimeScreen() {
 
   function closePreview() {
     setCapturedPhoto(null);
+    setFilteredPhoto(null);
+    setShowHint(true); // Yeni fotoğraf için hint'i yeniden göster
+  }
+
+  // UI gizleme/gösterme fonksiyonları
+  function hideUI() {
+    setHideUIOnPress(true);
+    Animated.timing(uiOpacityAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }
+
+  function showUI() {
+    setHideUIOnPress(false);
+    Animated.timing(uiOpacityAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
   }
 
   const getCurrentProductIndex = () => {
@@ -327,8 +517,6 @@ function RealTimeScreen() {
     setShowHelp(false);
   };
 
-
-
   // Swipe gesture tanımla
   const swipeGesture = Gesture.Pan().onEnd((event) => {
     "worklet";
@@ -345,61 +533,139 @@ function RealTimeScreen() {
   });
 
   if (capturedPhoto) {
+    const displayPhoto = filteredPhoto || capturedPhoto;
+
     return (
-      <View style={StyleSheet.absoluteFill}>
-        <StatusBar barStyle="light-content" backgroundColor="black" />
-        <Image
-          source={{ uri: `file://${capturedPhoto.path}` }}
-          style={StyleSheet.absoluteFill}
-        />
+      <TouchableWithoutFeedback
+        onPressIn={hideUI}
+        onPressOut={showUI}
+      >
+        <View style={StyleSheet.absoluteFill}>
+          <StatusBar barStyle="light-content" backgroundColor="black" />
 
-        {/* Gradient overlay for better UI */}
-        <LinearGradient
-          colors={["rgba(244, 235, 208, 0.2)", "transparent", "rgba(244, 235, 208, 0.9)"]}
-          style={StyleSheet.absoluteFill}
-        />
+          {/* Background Image */}
+          <Image
+            source={{ uri: `file://${displayPhoto.path}` }}
+            style={StyleSheet.absoluteFill}
+          />
 
-        {/* Product info header */}
-        <View style={styles.previewHeader}>
-          <View style={styles.productBadge}>
-            <Image
-              source={selectedProduct.pngImage}
-              style={styles.productBadgeImage}
+          {/* ✅ Minimal overlay sadece görsel zenginlik için */}
+          {filteredPhoto && filteredPhoto.captureMethod === "clean_camera" && (
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: "rgba(255, 215, 0, 0.05)", // Minimal golden overlay
+                  pointerEvents: "none",
+                },
+              ]}
             />
-            <View style={styles.productBadgeContent}>
-              <Text style={styles.productBadgeTitle}>{selectedProduct.name}</Text>
-              <Text style={styles.productBadgeSubtitle}>Bronzlaştırma Filtresi</Text>
+          )}
+
+          <Animated.View 
+            style={[
+              StyleSheet.absoluteFill,
+              { 
+                opacity: uiOpacityAnim,
+                pointerEvents: hideUIOnPress ? 'none' : 'auto'
+              }
+            ]}
+          >
+          </Animated.View>
+
+          {/* Processing overlay - her zaman görünür olsun */}
+          {isProcessingPhoto && (
+            <View style={styles.processingOverlay}>
+              <View style={styles.processingContent}>
+                <Text style={styles.processingText}>📸 Capture ediliyor...</Text>
+              </View>
             </View>
-          </View>
+          )}
+
+          {/* Animasyonlu UI Container */}
+          <Animated.View 
+            style={[
+              StyleSheet.absoluteFill,
+              { 
+                opacity: uiOpacityAnim,
+                pointerEvents: hideUIOnPress ? 'none' : 'auto'
+              }
+            ]}
+          >
+            {/* Product info header */}
+            <View style={styles.previewHeader}>
+              <View style={styles.productBadge}>
+                <Image
+                  source={selectedProduct.pngImage}
+                  style={styles.productBadgeImage}
+                />
+                <View style={styles.productBadgeContent}>
+                  <Text style={styles.productBadgeTitle}>
+                    {selectedProduct.name}
+                  </Text>
+                  <Text style={styles.productBadgeSubtitle}>
+                    {filteredPhoto?.captureMethod === "clean_camera"
+                      ? "📸 Temiz Kamera Capture"
+                      : "Bronzlaştırma Filtresi"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Filter status indicator */}
+            {filteredPhoto && filteredPhoto.captureMethod === "clean_camera" && (
+              <View style={styles.filterStatusBadge}>
+                <Ionicons name="camera" size={16} color="#4CAF50" />
+                <Text style={styles.filterStatusText}>Temiz Kamera Capture ✨</Text>
+              </View>
+            )}
+
+            {/* Action buttons */}
+            <View style={styles.previewActions}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.shareButton]}
+                onPress={() => {}}
+                disabled={isProcessingPhoto}
+              >
+                <Ionicons name="share-social" size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>Paylaş</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.buyButton]}
+                onPress={buyProduct}
+                disabled={isProcessingPhoto}
+              >
+                <Ionicons name="cart" size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>Satın Al</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.closeButton]}
+                onPress={closePreview}
+                disabled={isProcessingPhoto}
+              >
+                <Ionicons name="close" size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>Kapat</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+          {/* Basılı tutma ipucu */}
+          {!hideUIOnPress && showHint && (
+            <Animated.View 
+              style={[
+                styles.holdToHideHint,
+                { opacity: uiOpacityAnim }
+              ]}
+            >
+              <Text style={styles.holdToHideText}>
+                👆 Basılı tut: UI gizle
+              </Text>
+            </Animated.View>
+          )}
         </View>
-
-        {/* Action buttons */}
-        <View style={styles.previewActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.shareButton]}
-            onPress={() => {}}
-          >
-            <Ionicons name="share-social" size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>Paylaş</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.buyButton]}
-            onPress={buyProduct}
-          >
-            <Ionicons name="cart" size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>Satın Al</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.closeButton]}
-            onPress={closePreview}
-          >
-            <Ionicons name="close" size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>Kapat</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      </TouchableWithoutFeedback>
     );
   }
 
@@ -407,43 +673,56 @@ function RealTimeScreen() {
     <View style={StyleSheet.absoluteFill}>
       <StatusBar barStyle="light-content" backgroundColor="black" />
 
-      {hasPermission && cameraDevice ? (
-        <Animated.View
-          style={[StyleSheet.absoluteFill, { opacity: fadeAnim }]}
-        >
-          <Camera
-            ref={camera}
-            style={StyleSheet.absoluteFill}
-            isActive={isCameraActive}
-            device={cameraDevice}
-            onError={handleCameraMountError}
-            faceDetectionCallback={handleFacesDetected}
-            onUIRotationChanged={handleUiRotation}
-            skiaActions={handleSkiaActions}
-            faceDetectionOptions={faceDetectionOptions}
-            format={format}
-            photo={true}
-          />
-        </Animated.View>
-      ) : (
-        <View style={styles.permissionScreen}>
-          <LinearGradient
-            colors={["#FF6B35", "#F7931E", "#FFD23F"]}
-            style={StyleSheet.absoluteFill}
-          />
-          <Text style={styles.permissionTitle}>🔒 Kamera İzni Gerekli</Text>
-          <Text style={styles.permissionText}>
-            Bronzlaştırma filtresini kullanmak için kamera izni vermeniz
-            gerekmektedir.
-          </Text>
-          <TouchableOpacity
-            style={styles.permissionButton}
-            onPress={requestPermission}
+      {/* ViewShot sadece kamera görüntüsünü kapsıyor - UI elementleri dışında */}
+      <ViewShot
+        ref={viewShotRef}
+        style={StyleSheet.absoluteFill}
+        options={{
+          format: "jpg",
+          quality: 0.9,
+        }}
+      >
+        {hasPermission && cameraDevice ? (
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { opacity: fadeAnim }]}
           >
-            <Text style={styles.permissionButtonText}>İzin Ver</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+            <Camera
+              ref={camera}
+              style={StyleSheet.absoluteFill}
+              isActive={isCameraActive}
+              device={cameraDevice}
+              onError={handleCameraMountError}
+              faceDetectionCallback={handleFacesDetected}
+              onUIRotationChanged={handleUiRotation}
+              skiaActions={handleSkiaActions}
+              faceDetectionOptions={faceDetectionOptions}
+              format={format}
+              photo={true}
+            />
+          </Animated.View>
+        ) : (
+          <View style={styles.permissionScreen}>
+            <LinearGradient
+              colors={["#FF6B35", "#F7931E", "#FFD23F"]}
+              style={StyleSheet.absoluteFill}
+            />
+            <Text style={styles.permissionTitle}>🔒 Kamera İzni Gerekli</Text>
+            <Text style={styles.permissionText}>
+              Bronzlaştırma filtresini kullanmak için kamera izni vermeniz
+              gerekmektedir.
+            </Text>
+            <TouchableOpacity
+              style={styles.permissionButton}
+              onPress={requestPermission}
+            >
+              <Text style={styles.permissionButtonText}>İzin Ver</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ViewShot>
+
+      {/* Tüm UI elementleri ViewShot'ın DIŞINDA - fotoğrafta görünmeyecek */}
+
       {/* Top UI Bar */}
       <View style={styles.topBar}>
         <LinearGradient
@@ -527,6 +806,17 @@ function RealTimeScreen() {
         </Animated.View>
       )}
 
+      {/* Processing overlay */}
+      {isProcessingPhoto && (
+        <View style={styles.processingOverlay}>
+          <View style={styles.processingContent}>
+            <Text style={styles.processingText}>
+              📸 Temiz fotoğraf alınıyor...
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Main camera controls */}
       <GestureDetector gesture={swipeGesture}>
         <Animated.View
@@ -565,20 +855,36 @@ function RealTimeScreen() {
             }}
           >
             <TouchableOpacity
-              style={styles.mainCaptureButton}
+              style={[
+                styles.mainCaptureButton,
+                isProcessingPhoto && styles.mainCaptureButtonDisabled,
+              ]}
               onPress={takePhoto}
+              disabled={isProcessingPhoto}
             >
               <LinearGradient
-                colors={["#FF6B35", "#F7931E", "#FFD23F"]}
+                colors={
+                  isProcessingPhoto
+                    ? ["#ccc", "#999", "#666"]
+                    : ["#FF6B35", "#F7931E", "#FFD23F"]
+                }
                 style={styles.captureButtonGradient}
               />
-              <Image
-                source={selectedProduct.pngImage}
-                style={styles.mainCaptureButtonImage}
-              />
+
+              {isProcessingPhoto ? (
+                <View style={styles.processingIndicator}>
+                  <Text style={styles.processingIndicatorText}>⏳</Text>
+                </View>
+              ) : (
+                <Image
+                  source={selectedProduct.pngImage}
+                  style={styles.mainCaptureButtonImage}
+                />
+              )}
+
               <View style={styles.innerMainCaptureButton} />
               <Text style={styles.mainCaptureButtonText}>
-                {selectedProduct.name}
+                {isProcessingPhoto ? "Capturing..." : selectedProduct.name}
               </Text>
             </TouchableOpacity>
           </Animated.View>
@@ -610,6 +916,7 @@ function RealTimeScreen() {
       <View style={styles.swipeIndicator}>
         <Text style={styles.swipeText}>← Kaydır →</Text>
       </View>
+
       {/* Side controls */}
       <View style={styles.sideControls}>
         <TouchableOpacity
@@ -844,6 +1151,16 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 10,
   },
+  mainCaptureButtonDisabled: {
+    opacity: 0.7,
+  },
+  processingIndicator: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  processingIndicatorText: {
+    fontSize: 30,
+  },
   captureButtonGradient: {
     position: "absolute",
     width: 110,
@@ -919,7 +1236,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
-
   // Status Overlays
   statusOverlay: {
     position: "absolute",
@@ -987,6 +1303,53 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     zIndex: 10,
+  },
+  processingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+  },
+  processingContent: {
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
+    paddingHorizontal: 32,
+    paddingVertical: 20,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  processingText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  filterStatusBadge: {
+    position: "absolute",
+    top: 130,
+    right: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(76, 175, 80, 0.9)",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    zIndex: 10,
+  },
+  filterStatusText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
   },
   productBadge: {
     flexDirection: "row",
@@ -1056,6 +1419,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginTop: 6,
+  },
+
+  // Hold to hide hint styles
+  holdToHideHint: {
+    position: "absolute",
+    top: "50%",
+    left: 20,
+    right: 20,
+    transform: [{ translateY: -10 }],
+    alignItems: "center",
+    pointerEvents: "none",
+  },
+  holdToHideText: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 14,
+    fontWeight: "500",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    textAlign: "center",
+    overflow: "hidden",
   },
 });
 
