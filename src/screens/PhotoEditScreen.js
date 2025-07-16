@@ -134,12 +134,6 @@ function optimizeMaskPoints(
   containerHeight,
   brushSize
 ) {
-  console.log("🎯 Koordinat Debug:", {
-    origSize: `${origWidth}x${origHeight}`,
-    containerSize: `${containerWidth}x${containerHeight}`,
-    pointCount: points.length,
-    samplePoints: points.slice(0, 3).map(p => `(${p.x.toFixed(0)},${p.y.toFixed(0)})`)
-  });
 
   // 9:16 aspect ratio için optimize edilmiş koordinat dönüşümü
   const imageRatio = origWidth / origHeight;
@@ -164,11 +158,6 @@ function optimizeMaskPoints(
     offsetY = (containerHeight - displayHeight) / 2;
   }
 
-  console.log("📐 Transform:", {
-    scale: scale.toFixed(4),
-    displaySize: `${displayWidth.toFixed(0)}x${displayHeight.toFixed(0)}`,
-    offset: `${offsetX.toFixed(0)},${offsetY.toFixed(0)}`
-  });
 
   // Brush parametreleri - daha küçük ve odaklı alan için
   const absBrush = Math.min(Math.ceil(brushSize / scale), 15); // 25'ten 15'e düşürdüm
@@ -182,19 +171,8 @@ function optimizeMaskPoints(
     const relX = pt.x - offsetX;
     const relY = pt.y - offsetY;
     
-    // Debug için ilk birkaç nokta
-    if (index < 3) {
-      console.log(`📍 Nokta ${index}:`, {
-        screen: `(${pt.x.toFixed(0)}, ${pt.y.toFixed(0)})`,
-        relative: `(${relX.toFixed(0)}, ${relY.toFixed(0)})`,
-        displaySize: `${displayWidth.toFixed(0)}x${displayHeight.toFixed(0)}`,
-        containerSize: `${containerWidth}x${containerHeight}`
-      });
-    }
-    
     // Bounds kontrolü
     if (relX < 0 || relY < 0 || relX >= displayWidth || relY >= displayHeight) {
-      if (index < 3) console.log(`❌ Nokta ${index} bounds dışında`);
       return;
     }
 
@@ -205,24 +183,9 @@ function optimizeMaskPoints(
     // Platform-specific koordinat düzeltmeleri kaldırıldı
     // Doğrudan koordinat dönüşümü kullanılıyor
 
-    if (index < 3) {
-      console.log(`🎯 FRONTEND DEBUG - Nokta ${index}:`, {
-        platform: Platform.OS,
-        screen: `(${pt.x.toFixed(0)}, ${pt.y.toFixed(0)})`,
-        relative: `(${relX.toFixed(0)}, ${relY.toFixed(0)})`,
-        image: `(${absX}, ${absY})`,
-        imagePercent: `(${(absX/origWidth*100).toFixed(1)}%, ${(absY/origHeight*100).toFixed(1)}%)`,
-        bounds: `0-${origWidth-1}, 0-${origHeight-1}`,
-        scale: scale.toFixed(4),
-        transform: {
-          screenToRelative: `(${pt.x} - ${offsetX.toFixed(0)}, ${pt.y} - ${offsetY.toFixed(0)})`,
-          relativeToImage: `(${relX.toFixed(0)} / ${scale.toFixed(4)}, ${relY.toFixed(0)} / ${scale.toFixed(4)})`
-        }
-      });
-    }
+    
 
     if (absX < 0 || absY < 0 || absX >= origWidth || absY >= origHeight) {
-      if (index < 3) console.log(`❌ Nokta ${index} image bounds dışında`);
       return;
     }
     
@@ -254,16 +217,6 @@ function optimizeMaskPoints(
       maxY: Math.max(...mask.map(p => p.y))
     };
     
-    console.log("🎨 Final Mask:", {
-      count: mask.length,
-      bounds: `(${bounds.minX},${bounds.minY}) → (${bounds.maxX},${bounds.maxY})`,
-      center: `(${Math.round((bounds.minX + bounds.maxX)/2)}, ${Math.round((bounds.minY + bounds.maxY)/2)})`,
-      area: `${bounds.maxX - bounds.minX}x${bounds.maxY - bounds.minY}`,
-      positionPercent: {
-        centerX: `${((bounds.minX + bounds.maxX)/2/origWidth*100).toFixed(1)}%`,
-        centerY: `${((bounds.minY + bounds.maxY)/2/origHeight*100).toFixed(1)}%`
-      }
-    });
   }
   
   return mask;
@@ -576,7 +529,6 @@ const PhotoEditScreen = () => {
 
   // Fırça boyutunu güncelleme fonksiyonu
   const updateBrushSize = (size) => {
-    console.log("updateBrushSize", size);
     BRUSH_RADIUS = size;
     BRUSH_RADIUS_SQ = size * size;
     setBrushSize(size);
@@ -597,28 +549,22 @@ const PhotoEditScreen = () => {
   };
 
   const takePhoto = async () => {
-    console.log("Kamera açılıyor...");
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      console.log("Kamera izin durumu:", status);
       
       if (status !== "granted") {
         Alert.alert("Hata", "Kamera erişim izni gerekiyor!");
         return;
       }
       
-      console.log("Kamera başlatılıyor...");
               const result = await ImagePicker.launchCameraAsync({
           allowsEditing: true,
           aspect: [9, 16], // Modern mobil format: 9:16 (büyük görünüm)
           quality: 1,
         });
       
-      console.log("Kamera sonucu:", result);
-      
       if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
-        console.log("Çekilen foto:", { width: asset.width, height: asset.height });
         
         // 9:16 ratio kontrolü ve zorunlu kırpma
         const currentRatio = asset.width / asset.height;
@@ -626,7 +572,6 @@ const PhotoEditScreen = () => {
         const ratioTolerance = 0.05;
         
         if (Math.abs(currentRatio - targetRatio) > ratioTolerance) {
-          console.log("⚠️ Aspect ratio uyumsuz, zorunlu kırpma uygulanıyor...");
           
           // 9:16 ratio için ideal boyutları hesapla
           let newWidth, newHeight;
@@ -643,11 +588,6 @@ const PhotoEditScreen = () => {
           const originX = Math.round((asset.width - newWidth) / 2);
           const originY = Math.round((asset.height - newHeight) / 2);
           
-          console.log("🔄 Kırpma parametreleri:", {
-            original: `${asset.width}x${asset.height}`,
-            target: `${newWidth}x${newHeight}`,
-            crop: `${originX},${originY}`
-          });
           
           try {
             const manipulatedImage = await ImageManipulator.manipulateAsync(
@@ -663,11 +603,7 @@ const PhotoEditScreen = () => {
               { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
             );
             
-            console.log("✅ Kırpma tamamlandı:", {
-              width: manipulatedImage.width,
-              height: manipulatedImage.height,
-              ratio: (manipulatedImage.width / manipulatedImage.height).toFixed(3)
-            });
+            
             
             setImage(manipulatedImage.uri);
             setImageDimensions({ 
@@ -675,7 +611,6 @@ const PhotoEditScreen = () => {
               height: manipulatedImage.height 
             });
           } catch (error) {
-            console.error("❌ Kırpma hatası:", error);
             Alert.alert("Hata", "Fotoğraf kırpılırken hata oluştu");
             return;
           }
@@ -689,10 +624,8 @@ const PhotoEditScreen = () => {
         setSelectedProduct(null);
         setStep(1);
       } else {
-        console.log("Kamera kullanımı iptal edildi");
       }
     } catch (error) {
-      console.error("Kamera hatası:", error);
       Alert.alert("Hata", "Kamera açılırken hata oluştu: " + error.message);
     }
   };
@@ -787,7 +720,6 @@ const PhotoEditScreen = () => {
   const onImageLoad = (event) => {
     const { width, height } = event.nativeEvent.source;
     const ratio = width / height;
-    console.log(`📸 Image yüklendi: ${width}x${height}, ratio: ${ratio.toFixed(2)} (beklenen: 0.56)`);
     setImageDimensions({ width, height });
   };
 
@@ -858,23 +790,13 @@ const PhotoEditScreen = () => {
         });
       });
       
-      console.log('🎯 NORMALIZE DEBUG:', {
-        displaySize: `${displaySize.width}x${displaySize.height}`,
-        originalMaskCount: paths.reduce((sum, p) => sum + p.points.length, 0),
-        normalizedMaskCount: normalizedMask.length,
-        sampleNormalized: normalizedMask.slice(0, 3)
-      });
+      
       
       const mask = normalizedMask;
 
       // Device bilgilerini al
       const deviceInfo = await getDeviceInfo();
-      console.log('📱 Device Info:', {
-        brand: deviceInfo.deviceBrand,
-        model: deviceInfo.deviceId,
-        os: `${deviceInfo.systemName} ${deviceInfo.systemVersion}`,
-        uniqueId: deviceInfo.uniqueId?.substring(0, 8) + '...' // Security için sadece ilk 8 karakter
-      });
+
 
       const formData = new FormData();
       formData.append("image", {
@@ -895,12 +817,11 @@ const PhotoEditScreen = () => {
       );
 
       const result = await response.json();
-      console.log(result);
+
       if (result.success) {
         // Görüntüyü göster
         const imageUrl = `${API_URL}${result.imageUrl}`;
         setResultImage(imageUrl);
-        console.log('Image result URL:', imageUrl);
         setResultImageId(result.imageId); // Paylaş için imageId'yi kaydet
         setStep(3);
       } else {
@@ -908,7 +829,6 @@ const PhotoEditScreen = () => {
       }
     } catch (e) {
       Alert.alert("Hata", "Filtre uygulanırken hata oluştu: " + e.message);
-      console.log(e);
     } finally {
       setLoading(false);
     }
@@ -998,28 +918,23 @@ const PhotoEditScreen = () => {
   };
 
   const pickImage = async () => {
-    console.log("Galeri açılıyor...");
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log("Galeri izin durumu:", status);
       
       if (status !== "granted") {
         Alert.alert("Hata", "Galeriye erişim izni gerekiyor!");
         return;
       }
       
-      console.log("ImagePicker başlatılıyor...");
               const result = await ImagePicker.launchImageLibraryAsync({
           allowsEditing: true,
           aspect: [9, 16], // Modern mobil format: 9:16 (büyük görünüm)
           quality: 1,
         });
       
-      console.log("ImagePicker sonucu:", result);
       
       if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
-        console.log("Seçilen asset:", { width: asset.width, height: asset.height });
         
         // 9:16 ratio kontrolü ve zorunlu kırpma
         const currentRatio = asset.width / asset.height;
@@ -1027,7 +942,6 @@ const PhotoEditScreen = () => {
         const ratioTolerance = 0.05;
         
         if (Math.abs(currentRatio - targetRatio) > ratioTolerance) {
-          console.log("⚠️ Aspect ratio uyumsuz, zorunlu kırpma uygulanıyor...");
           
           // 9:16 ratio için ideal boyutları hesapla
           let newWidth, newHeight;
@@ -1044,11 +958,6 @@ const PhotoEditScreen = () => {
           const originX = Math.round((asset.width - newWidth) / 2);
           const originY = Math.round((asset.height - newHeight) / 2);
           
-          console.log("🔄 Kırpma parametreleri:", {
-            original: `${asset.width}x${asset.height}`,
-            target: `${newWidth}x${newHeight}`,
-            crop: `${originX},${originY}`
-          });
           
           try {
             const manipulatedImage = await ImageManipulator.manipulateAsync(
@@ -1064,11 +973,6 @@ const PhotoEditScreen = () => {
               { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
             );
             
-            console.log("✅ Kırpma tamamlandı:", {
-              width: manipulatedImage.width,
-              height: manipulatedImage.height,
-              ratio: (manipulatedImage.width / manipulatedImage.height).toFixed(3)
-            });
             
             setImage(manipulatedImage.uri);
             setImageDimensions({ 
@@ -1230,7 +1134,6 @@ const PhotoEditScreen = () => {
                   style={StyleSheet.absoluteFill}
                   onLayout={(e) => {
                     const { width, height } = e.nativeEvent.layout;
-                    console.log("📐 Container Layout:", { width, height });
                     setDisplaySize({ width, height });
                   }}
                 >

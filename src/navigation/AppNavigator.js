@@ -24,7 +24,6 @@ const AppNavigator = () => {
     try {
       const completed = await isOnboardingCompleted();
       setIsOnboardingDone(completed);
-      console.log('📋 Onboarding status:', completed ? 'Completed' : 'Not completed');
     } catch (error) {
       console.error('Error checking onboarding status:', error);
       // Hata durumunda onboarding'i göster

@@ -280,9 +280,6 @@ function RealTimeScreen() {
 
     const { contours } = faces[0];
 
-    // Hata ayıklama için konturları logla
-    console.log("Contours available:", Object.keys(contours || {}));
-
     // Yüz konturu oluştur
     const facePath = Skia.Path.Make();
     const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
@@ -311,7 +308,6 @@ function RealTimeScreen() {
     ];
     excludeContours.forEach((key) => {
       if (contours?.[key]) {
-        console.log(`Processing contour: ${key}`, contours[key].length);
         contours[key].forEach((point, index) => {
           if (index === 0) {
             excludePath.moveTo(point.x, point.y);
@@ -321,7 +317,6 @@ function RealTimeScreen() {
         });
         excludePath.close();
       } else {
-        console.log(`Contour ${key} not found`);
       }
     });
 
@@ -383,15 +378,12 @@ function RealTimeScreen() {
 
       // SNAPCHAT TARZI: Sadece kamera görüntüsünü capture et (UI elementleri hariç)
       if (viewShotRef.current) {
-        console.log("📸 Temiz kamera görüntüsü capture ediliyor...");
 
         const uri = await viewShotRef.current.capture({
           format: "jpg",
           quality: 0.9,
           result: "tmpfile",
         });
-
-        console.log("✅ Temiz kamera capture başarılı:", uri);
 
         // Screenshot'ı photo objesi formatında oluştur
         const capturedPhoto = {
@@ -428,7 +420,6 @@ function RealTimeScreen() {
         }
       }
     } catch (error) {
-      console.error("Photo capture error:", error);
     } finally {
       setIsProcessingPhoto(false);
     }
@@ -451,7 +442,6 @@ function RealTimeScreen() {
         },
       });
     } catch (error) {
-      console.error("Filter application error:", error);
       // Hata durumunda orijinal fotoğrafı kullan
       setFilteredPhoto(photo);
     }
@@ -489,17 +479,6 @@ function RealTimeScreen() {
         0,
       ];
 
-      console.log(
-        `Bronzlaştırma uygulanıyor: ${selectedProduct.name} (${color})`
-      );
-      console.log(
-        `RGB değerleri: R:${r.toFixed(3)}, G:${g.toFixed(3)}, B:${b.toFixed(3)}`
-      );
-      console.log(
-        `Matrix intensities: R:${(r * 0.15).toFixed(3)}, G:${(g * 0.08).toFixed(
-          3
-        )}, B:${(b * 0.03).toFixed(3)}`
-      );
 
       // Simüle edilmiş processing süresi
       await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -537,7 +516,6 @@ function RealTimeScreen() {
   async function uploadPhotoToBackend(photoUri) {
     try {
       setIsUploading(true);
-      console.log("📤 Fotoğraf backend'e upload ediliyor...", photoUri);
 
       // Device bilgilerini al
       const deviceInfo = await getDeviceInfo();
@@ -557,10 +535,7 @@ function RealTimeScreen() {
         imageUri = `file://${photoUri}`;
       }
       
-      console.log("📎 Image URI format:", {
-        original: photoUri,
-        formatted: imageUri
-      });
+
       
       formData.append("image", {
         uri: imageUri,
@@ -572,11 +547,6 @@ function RealTimeScreen() {
       formData.append("selectedProduct", JSON.stringify(selectedProduct));
       formData.append("deviceInfo", JSON.stringify(deviceInfo));
 
-      console.log("📤 Upload başlatılıyor:", {
-        photoSize: fileInfo.size,
-        selectedProduct: selectedProduct.name,
-        uploadType: "realtime-filtered"
-      });
 
       const response = await fetch(
         `${API_URL}/api/public/phone/upload-filtered-photo`,
@@ -587,13 +557,9 @@ function RealTimeScreen() {
       );
 
       const result = await response.json();
-      console.log("📤 Upload sonucu:", result);
 
       if (result.success) {
-        console.log("✅ Upload başarılı:", {
-          imageId: result.imageId,
-          imageUrl: result.imageUrl
-        });
+
         return {
           imageId: result.imageId,
           imageUrl: result.imageUrl,
@@ -622,13 +588,11 @@ function RealTimeScreen() {
 
       // Eğer henüz backend'e upload edilmemişse, önce upload et
       if (!resultImageId) {
-        console.log("📤 Önce fotoğraf upload ediliyor...");
         
         const uploadResult = await uploadPhotoToBackend(filteredPhoto.path);
         
         if (uploadResult.success) {
           setResultImageId(uploadResult.imageId);
-          console.log("✅ Upload başarılı, paylaşım başlatılıyor...");
           
           // Upload sonrası paylaşımı yap
           await performShare(uploadResult.imageId);
@@ -655,7 +619,6 @@ function RealTimeScreen() {
   // Gerçek paylaşım işlemini yapan fonksiyon
   async function performShare(imageId) {
     try {
-      console.log("🚀 Paylaşım API'si çağrılıyor:", imageId);
 
       const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
         method: "POST",
@@ -668,7 +631,6 @@ function RealTimeScreen() {
       });
 
       const result = await response.json();
-      console.log("🚀 Paylaşım sonucu:", result);
 
       if (result.success) {
         // Başarı için haptic feedback
@@ -683,7 +645,6 @@ function RealTimeScreen() {
               style: "default",
               onPress: () => {
                 // Başarılı paylaşım sonrası UI feedback
-                console.log("✅ Paylaşım tamamlandı");
               }
             }
           ]
@@ -692,7 +653,6 @@ function RealTimeScreen() {
         throw new Error(result.error || "Paylaşım API'si hatası");
       }
     } catch (error) {
-      console.error("❌ Paylaşım API hatası:", error);
       throw error;
     }
   }

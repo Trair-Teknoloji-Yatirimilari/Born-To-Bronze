@@ -37,7 +37,6 @@ export const completeOnboarding = async () => {
   try {
     await AsyncStorage.setItem(ONBOARDING_KEYS.COMPLETED, 'true');
     await AsyncStorage.setItem(ONBOARDING_KEYS.CURRENT_STEP, ONBOARDING_STEPS.COMPLETED);
-    console.log('✅ Onboarding completed successfully');
   } catch (error) {
     console.error('Error completing onboarding:', error);
   }
@@ -58,7 +57,6 @@ export const getCurrentOnboardingStep = async () => {
 export const setCurrentOnboardingStep = async (step) => {
   try {
     await AsyncStorage.setItem(ONBOARDING_KEYS.CURRENT_STEP, step);
-    console.log(`📍 Onboarding step set to: ${step}`);
   } catch (error) {
     console.error('Error setting onboarding step:', error);
   }
@@ -68,7 +66,6 @@ export const setCurrentOnboardingStep = async (step) => {
 export const markOnboardingMilestone = async (milestone, completed = true) => {
   try {
     await AsyncStorage.setItem(milestone, completed.toString());
-    console.log(`✅ Onboarding milestone marked: ${milestone} = ${completed}`);
   } catch (error) {
     console.error('Error marking onboarding milestone:', error);
   }
@@ -96,7 +93,6 @@ export const resetOnboarding = async () => {
       ONBOARDING_KEYS.PERMISSIONS_GRANTED,
       ONBOARDING_KEYS.TUTORIAL_COMPLETED,
     ]);
-    console.log('🔄 Onboarding reset successfully');
   } catch (error) {
     console.error('Error resetting onboarding:', error);
   }
@@ -135,8 +131,6 @@ export const trackOnboardingEvent = async (eventName, data = {}) => {
       progress: await getOnboardingProgress(),
       ...data,
     };
-
-    console.log('📊 Onboarding Event:', eventData);
 
     // TODO: Analytics service'e gönder
     // await analytics.track('onboarding_event', eventData);

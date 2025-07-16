@@ -111,7 +111,6 @@ class ErrorBoundary extends React.Component {
           onPress: () => {
             // React Native'de app restart için
             // TODO: react-native-restart kullanılabilir
-            console.log('App restart requested');
           },
         },
       ]
