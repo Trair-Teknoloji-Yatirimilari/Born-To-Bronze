@@ -269,12 +269,14 @@ function optimizeMaskPoints(
   return mask;
 }
 
-const API_URL = __DEV__
-  ? Platform.select({
-      ios: "http://192.168.1.29:3000",
-      android: "http://10.0.2.2:3000",
-    })
-  : "https://your-production-api.com";
+const API_URL = 'https://kafanagoreya.yumru.dev'
+
+// __DEV__
+//   ? Platform.select({
+//       ios: "http://192.168.1.29:3000",
+//       android: "http://10.0.2.2:3000",
+//     })
+//   : "https://your-production-api.com";
 
 // Device bilgilerini toplayan utility fonksiyon
 const getDeviceInfo = async () => {
@@ -898,6 +900,7 @@ const PhotoEditScreen = () => {
         // Görüntüyü göster
         const imageUrl = `${API_URL}${result.imageUrl}`;
         setResultImage(imageUrl);
+        console.log('Image result URL:', imageUrl);
         setResultImageId(result.imageId); // Paylaş için imageId'yi kaydet
         setStep(3);
       } else {

@@ -44,12 +44,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../constants/theme";
 
 // API URL Configuration
-const API_URL = __DEV__
-  ? Platform.select({
-      ios: "http://192.168.1.29:3000",
-      android: "http://10.0.2.2:3000",
-    })
-  : "https://your-production-api.com";
+const API_URL = 'https://kafanagoreya.yumru.dev'
+
+// __DEV__
+//   ? Platform.select({
+//       ios: "http://192.168.1.29:3000",
+//       android: "http://10.0.2.2:3000",
+//     })
+//   : "https://your-production-api.com";
 
 // Device bilgilerini toplayan utility fonksiyon
 const getDeviceInfo = async () => {
