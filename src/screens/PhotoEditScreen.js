@@ -125,7 +125,7 @@ function denormalizeCoordinates(normalizedPaths, imageWidth, imageHeight) {
   );
 }
 
-// Mask noktalarını optimize eden fonksiyon (2x2 grid ve tekrarları engelle)
+// Mask noktalarını optimize eden fonksiyon - Basitleştirilmiş koordinat dönüşümü
 function optimizeMaskPoints(
   points,
   origWidth,
@@ -134,29 +134,8 @@ function optimizeMaskPoints(
   containerHeight,
   brushSize
 ) {
-
-  // 9:16 aspect ratio için optimize edilmiş koordinat dönüşümü
-  const imageRatio = origWidth / origHeight;
-  const containerRatio = containerWidth / containerHeight;
-  
-  // ResizeMode "contain" için doğru scale hesaplama
-  let scale, displayWidth, displayHeight, offsetX, offsetY;
-  
-  if (imageRatio < containerRatio) {
-    // Image daha uzun - yükseklik sınırlayıcı
-    scale = containerHeight / origHeight;
-    displayHeight = containerHeight;
-    displayWidth = origWidth * scale;
-    offsetX = (containerWidth - displayWidth) / 2;
-    offsetY = 0;
-  } else {
-    // Image daha geniş - genişlik sınırlayıcı  
-    scale = containerWidth / origWidth;
-    displayWidth = containerWidth;
-    displayHeight = origHeight * scale;
-    offsetX = 0;
-    offsetY = (containerHeight - displayHeight) / 2;
-  }
+  // Artık karmaşık hesaplama yok - container coordinates = display coordinates
+  // resizeMode "cover" + aspectRatio 9/16 = 1:1 mapping
 
 
   // Brush parametreleri - daha küçük ve odaklı alan için
@@ -167,27 +146,24 @@ function optimizeMaskPoints(
   const mask = [];
   
   points.forEach((pt, index) => {
-    // Screen koordinatlarını display koordinatlarına dönüştür
-    const relX = pt.x - offsetX;
-    const relY = pt.y - offsetY;
+    // Basit koordinat dönüşümü - container coordinates zaten relative
+    const containerX = pt.x;
+    const containerY = pt.y;
     
     // Bounds kontrolü
-    if (relX < 0 || relY < 0 || relX >= displayWidth || relY >= displayHeight) {
+    if (containerX < 0 || containerY < 0 || containerX >= containerWidth || containerY >= containerHeight) {
       return;
     }
 
-    // Image koordinatlarına dönüştür - Y'yi normal bırakıyorum
-    let absX = Math.round(relX / scale);
-    let absY = Math.round(relY / scale);
+    // resizeMode "cover" için koordinat dönüşümü - çok daha basit
+    // Container boyutları = display boyutları (aspectRatio: 9/16 sabit)
+    // Container'da image "cover" modunda, bu da 1:1 mapping demek
+    let absX = Math.round((containerX / containerWidth) * origWidth);
+    let absY = Math.round((containerY / containerHeight) * origHeight);
     
-    // Platform-specific koordinat düzeltmeleri kaldırıldı
-    // Doğrudan koordinat dönüşümü kullanılıyor
-
-    
-
-    if (absX < 0 || absY < 0 || absX >= origWidth || absY >= origHeight) {
-      return;
-    }
+    // Image bounds kontrolü
+    absX = Math.max(0, Math.min(absX, origWidth - 1));
+    absY = Math.max(0, Math.min(absY, origHeight - 1));
     
     // Brush alanı oluştur
     for (let dy = -absBrush; dy <= absBrush; dy += gridSize) {
@@ -323,6 +299,7 @@ const PhotoEditScreen = () => {
   });
   const [brushPos, setBrushPos] = useState(null);
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
+  const [containerLayout, setContainerLayout] = useState({ x: 0, y: 0, width: 0, height: 0 }); // Container position
   const [resultImage, setResultImage] = useState(null);
   const [resultImageId, setResultImageId] = useState(null); // Paylaş için gerekli
   const [showOriginal, setShowOriginal] = useState(false); // Before/After kontrolü
@@ -632,19 +609,24 @@ const PhotoEditScreen = () => {
 
   const onGestureEvent = (event) => {
     const { x, y } = event.nativeEvent;
-    setBrushPos({ x, y });
-    if (x < 0 || y < 0) return;
+    
+    // Container'a relative koordinatlar
+    const relativeX = x;
+    const relativeY = y;
+    
+    setBrushPos({ x: relativeX, y: relativeY });
+    if (relativeX < 0 || relativeY < 0 || relativeX > containerLayout.width || relativeY > containerLayout.height) return;
 
-    // Nokta anahtarı (ekranda piksel)
-    const key = `${Math.round(x)},${Math.round(y)}`;
+    // Nokta anahtarı (container'da piksel)
+    const key = `${Math.round(relativeX)},${Math.round(relativeY)}`;
     if (paintedRef.current.has(key)) return; // Zaten boyanmış
 
     if (lastPoint) {
       const newPoints = interpolatePoints(
         lastPoint.x,
         lastPoint.y,
-        x,
-        y
+        relativeX,
+        relativeY
       ).filter((pt) => {
         const k = `${Math.round(pt.x)},${Math.round(pt.y)}`;
         return !paintedRef.current.has(k);
@@ -657,9 +639,9 @@ const PhotoEditScreen = () => {
         points: optimizePoints([...prev.points, ...newPoints], brushSize),
       }));
     } else {
-      setCurrentPath({ points: [{ x, y }], brush: brushSize });
+      setCurrentPath({ points: [{ x: relativeX, y: relativeY }], brush: brushSize });
     }
-    setLastPoint({ x, y });
+    setLastPoint({ x: relativeX, y: relativeY });
   };
 
   const onGestureStart = (event) => {
@@ -667,14 +649,18 @@ const PhotoEditScreen = () => {
     setLastPoint(null);
     if (event && event.nativeEvent) {
       const { x, y } = event.nativeEvent;
-      const key = `${Math.round(x)},${Math.round(y)}`;
+      // Container'a relative koordinatlar
+      const relativeX = x;
+      const relativeY = y;
+      
+      const key = `${Math.round(relativeX)},${Math.round(relativeY)}`;
       if (!paintedRef.current.has(key)) {
-        setCurrentPath({ points: [{ x, y }], brush: brushSize });
+        setCurrentPath({ points: [{ x: relativeX, y: relativeY }], brush: brushSize });
         paintedRef.current.add(key); // ilk pikseli kilitle
       } else {
         setCurrentPath({ points: [], brush: brushSize });
       }
-      setBrushPos({ x, y });
+      setBrushPos({ x: relativeX, y: relativeY });
     }
   };
 
@@ -716,11 +702,10 @@ const PhotoEditScreen = () => {
     handleErase(x, y);
   };
 
-  // Image yüklendiğinde boyutlarını al
+  // Image yüklendiğinde boyutlarını al - crop edilmiş boyutları kullan
   const onImageLoad = (event) => {
-    const { width, height } = event.nativeEvent.source;
-    const ratio = width / height;
-    setImageDimensions({ width, height });
+    // Crop işleminden sonra imageDimensions zaten doğru set edilmiş
+    // Bu fonksiyon sadece load event'ini handle ediyor
   };
 
   const applyBronzeEffect = async () => {
@@ -744,49 +729,32 @@ const PhotoEditScreen = () => {
       
 
 
-      // Koordinatları normalize et (0-1 arası)
+      // Koordinatları normalize et (0-1 arası) - basit sistem
       const normalizedMask = [];
-      
-      // Container layout bilgilerini al
-      const imageRatio = origWidth / origHeight;
-      const containerRatio = containerWidth / containerHeight;
-      
-      let scale, displayWidth, displayHeight, offsetX, offsetY;
-      if (imageRatio < containerRatio) {
-        scale = containerHeight / origHeight;
-        displayHeight = containerHeight;
-        displayWidth = origWidth * scale;
-        offsetX = (containerWidth - displayWidth) / 2;
-        offsetY = 0;
-      } else {
-        scale = containerWidth / origWidth;
-        displayWidth = containerWidth;
-        displayHeight = origHeight * scale;
-        offsetX = 0;
-        offsetY = (containerHeight - displayHeight) / 2;
-      }
       
       paths.forEach((p) => {
         p.points.forEach((pt) => {
-          // Screen koordinatlarını display koordinatlarına dönüştür
-          const relativeX = pt.x - offsetX;
-          const relativeY = pt.y - offsetY;
+          // Basit koordinat normalizasyonu - container relative coordinates
+          const containerX = pt.x;
+          const containerY = pt.y;
           
-          // Normalize koordinatlar (0-1 arası)
-          const normalizedX = relativeX / displayWidth;
-          const normalizedY = relativeY / displayHeight;
-          
-          // Sadece geçerli koordinatları ekle
-          if (normalizedX >= 0 && normalizedX <= 1 && normalizedY >= 0 && normalizedY <= 1) {
-            // Brush büyüklüğünü de normalize et (image boyutuna göre)
-            const normalizedBrush = (p.brush || DEFAULT_BRUSH_RADIUS) / Math.min(displayWidth, displayHeight);
-            
-            normalizedMask.push({
-              x: normalizedX,
-              y: normalizedY,
-              brush: normalizedBrush
-            });
+          // Bounds kontrolü
+          if (containerX < 0 || containerY < 0 || containerX >= containerWidth || containerY >= containerHeight) {
+            return;
           }
+          
+          // Normalize koordinatlar (0-1 arası) - çok basit
+          const normalizedX = containerX / containerWidth;
+          const normalizedY = containerY / containerHeight;
+          
+          // Brush büyüklüğünü de normalize et (container boyutuna göre)
+          const normalizedBrush = (p.brush || DEFAULT_BRUSH_RADIUS) / Math.min(containerWidth, containerHeight);
+          
+          normalizedMask.push({
+            x: normalizedX,
+            y: normalizedY,
+            brush: normalizedBrush
+          });
         });
       });
       
@@ -1101,42 +1069,44 @@ const PhotoEditScreen = () => {
                 )}
               </TouchableOpacity>
 
-              <Image
-                ref={imageRef}
-                source={{ uri: image }}
-                style={styles.image}
-                resizeMode="contain"
-                onLoad={onImageLoad}
-              />
-
-              <PanGestureHandler
-                onGestureEvent={
-                  step === 1
-                    ? eraseMode
-                      ? onEraseGestureEvent
-                      : onGestureEvent
-                    : () => {}
-                }
-                onHandlerStateChange={({ nativeEvent }) => {
-                  const s = nativeEvent.state;
-                  if (s === GestureState.BEGAN) {
-                    onGestureStart(nativeEvent);
-                  } else if (
-                    s === GestureState.END ||
-                    s === GestureState.CANCELLED ||
-                    s === GestureState.FAILED
-                  ) {
-                    onGestureEnd();
-                  }
+              <View 
+                style={styles.imageContainer}
+                onLayout={(e) => {
+                  const { x, y, width, height } = e.nativeEvent.layout;
+                  setContainerLayout({ x, y, width, height });
+                  setDisplaySize({ width, height }); // displaySize de container boyutları
                 }}
               >
-                <Animated.View 
-                  style={StyleSheet.absoluteFill}
-                  onLayout={(e) => {
-                    const { width, height } = e.nativeEvent.layout;
-                    setDisplaySize({ width, height });
+                <Image
+                  ref={imageRef}
+                  source={{ uri: image }}
+                  style={styles.image}
+                  resizeMode="cover"
+                  onLoad={onImageLoad}
+                />
+                
+                <PanGestureHandler
+                  onGestureEvent={
+                    step === 1
+                      ? eraseMode
+                        ? onEraseGestureEvent
+                        : onGestureEvent
+                      : () => {}
+                  }
+                  onHandlerStateChange={({ nativeEvent }) => {
+                    const s = nativeEvent.state;
+                    if (s === GestureState.BEGAN) {
+                      onGestureStart(nativeEvent);
+                    } else if (
+                      s === GestureState.END ||
+                      s === GestureState.CANCELLED ||
+                      s === GestureState.FAILED
+                    ) {
+                      onGestureEnd();
+                    }
                   }}
                 >
+                  <Animated.View style={StyleSheet.absoluteFill}>
                   <Svg style={StyleSheet.absoluteFill}>
                     {paths.map((p, index) => (
                       <Path
@@ -1188,6 +1158,7 @@ const PhotoEditScreen = () => {
                   </Svg>
                 </Animated.View>
               </PanGestureHandler>
+              </View>
 
               {/* //? Fırça Kontrol Butonları */}
               {image && step === 1 && (
@@ -1388,7 +1359,7 @@ const PhotoEditScreen = () => {
                 <Image
                   source={{ uri: resultImage }}
                   style={styles.resultImage}
-                  resizeMode="contain"
+                  resizeMode="cover"
                 />
                 
                 {/* Interactive Overlay */}
@@ -1409,7 +1380,7 @@ const PhotoEditScreen = () => {
                       <Image
                         source={{ uri: image }}
                         style={styles.resultImage}
-                        resizeMode="contain"
+                        resizeMode="cover"
                       />
                       <View style={styles.originalImageLabel}>
                         <Text style={styles.originalImageLabelText}>ORİJİNAL</Text>
@@ -1636,7 +1607,8 @@ const styles = StyleSheet.create({
     position: "relative",
     flex: 1,
     justifyContent: "center",
-    // alignItems: "center",
+    alignItems: "center",
+    paddingHorizontal: 10,
   },
   floatingTopNavBack: {
     position: "absolute",
@@ -1685,15 +1657,15 @@ const styles = StyleSheet.create({
 
   },
   imageContainer: {
-    flex: 1,
-    alignSelf: "center",
+    width: '100%',
+    aspectRatio: 9/16,
     borderRadius: 10,
+    overflow: 'hidden',
+    position: 'relative',
   },
   image: {
-    flex: 1,
-    aspectRatio: 9/16, // Modern mobil format: 9:16 (büyük görünüm)
     width: '100%',
-    maxHeight: '100%',
+    height: '100%',
   },
   floatingButtonContainer: {
     position: "absolute",
@@ -1813,15 +1785,16 @@ const styles = StyleSheet.create({
   resultImageContainer: {
     position: 'relative',
     width: "100%",
-    height: 500,
+    aspectRatio: 9/16, // Crop edilmiş fotoğrafın exact ratio'su
     borderRadius: 10,
     overflow: 'hidden',
+    maxHeight: 500,
   },
   resultImage: {
     width: "100%",
-    height: 500,
+    aspectRatio: 9/16, // Crop edilmiş fotoğrafın exact ratio'su
     borderRadius: 10,
-    objectFit: "contain",
+    maxHeight: 500,
   },
   resultImageOverlay: {
     position: 'absolute',
