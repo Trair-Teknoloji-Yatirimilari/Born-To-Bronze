@@ -2,7 +2,7 @@ export const PRODUCTS = [
   {
     id: 1,
     name: "Ibiza",
-    image: require("../assets/products/ibiza-bronzing-bomb-200.jpg"),
+    image: require("../assets/products/ibiza-bronzing-bomb-200.png"),
     pngImage: require("../assets/products/ibiza-bronzing-bomb-200.png"),
     color: "#e01c02", // Kırmızımsı bronz ton
     price: 902.5,
@@ -12,7 +12,7 @@ export const PRODUCTS = [
   {
     id: 2,
     name: "Tan Maximizer",
-    image: require("../assets/products/tan-maximizer-bronzing-bomb-200.jpg"),
+    image: require("../assets/products/tan-maximizer-bronzing-bomb-200.png"),
     pngImage: require("../assets/products/tan-maximizer-bronzing-bomb-200.png"),
     color: "#e05002", // Mavimsi bronz ton
     price: 883.5,
@@ -22,7 +22,7 @@ export const PRODUCTS = [
   {
     id: 3,
     name: "Copacabana",
-    image: require("../assets/products/copacabana-bronzing-bomb-200.jpg"),
+    image: require("../assets/products/copacabana-bronzing-bomb-200.png"),
     pngImage: require("../assets/products/copacabana-bronzing-bomb-200.png"),
     color: "#e07102", // Yeşilimsi bronz ton
     price: 902.5,
@@ -32,7 +32,7 @@ export const PRODUCTS = [
   {
     id: 4,
     name: "Tulum",
-    image: require("../assets/products/tulum-bronzing-bomb-200.jpg"),
+    image: require("../assets/products/tulum-bronzing-bomb-200.png"),
     pngImage: require("../assets/products/tulum-bronzing-bomb-200.png"),
     color: "#e09302", // Altın bronz ton
     price: 902.5,
@@ -42,7 +42,7 @@ export const PRODUCTS = [
   {
     id: 5,
     name: "Chaos Pour Homme",
-    image: require("../assets/products/chaos-pour-homme-bronzing-bomb-200.jpg"),
+    image: require("../assets/products/chaos-pour-homme-bronzing-bomb-200.png"),
     pngImage: require("../assets/products/chaos-pour-homme-bronzing-bomb-200.png"),
     color: "#e0b002", // Altın bronz ton
     price: 902.5,

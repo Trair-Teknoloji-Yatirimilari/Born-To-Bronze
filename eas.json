@@ -19,12 +19,17 @@
         "buildType": "apk"
       },
       "ios": {
-        "simulator": true
+        "buildConfiguration": "Release"
       }
     },
     "production": {}
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "preview": {
+      "ios": {
+        "appleId": "mustafatopaloglu.app@gmail.com"
+      }
+    }
   }
 } 

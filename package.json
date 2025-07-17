@@ -19,15 +19,15 @@
     "@react-navigation/native": "^7.1.10",
     "@react-navigation/native-stack": "^7.3.14",
     "@shopify/react-native-skia": "v2.0.0-next.4",
-    "expo": "53.0.15",
+    "expo": "53.0.19",
     "expo-build-properties": "~0.14.8",
-    "expo-dev-client": "~5.2.2",
+    "expo-dev-client": "~5.2.4",
     "expo-image-manipulator": "~13.1.7",
     "expo-image-picker": "~16.1.4",
     "expo-linear-gradient": "^14.1.5",
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
-    "react-native": "0.79.4",
+    "react-native": "0.79.5",
     "react-native-canvas": "^0.1.40",
     "react-native-device-info": "^14.0.4",
     "react-native-gesture-handler": "~2.24.0",
@@ -40,7 +40,8 @@
     "react-native-vision-camera": "^4.7.0",
     "react-native-vision-camera-face-detector": "^1.8.6",
     "react-native-webview": "13.13.5",
-    "react-native-worklets-core": "^1.5.0"
+    "react-native-worklets-core": "^1.5.0",
+    "@expo/config-plugins": "~10.1.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
