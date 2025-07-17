@@ -525,6 +525,20 @@ const PhotoEditScreen = () => {
     }).start();
   };
 
+  // Fırça kontrollerini animasyonlu kapat
+  const closeBrushControls = () => {
+    if (showBrushControls) {
+      Animated.spring(brushControlsAnimation, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 7,
+      }).start(() => {
+        setShowBrushControls(false);
+      });
+    }
+  };
+
   const takePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -645,6 +659,10 @@ const PhotoEditScreen = () => {
   };
 
   const onGestureStart = (event) => {
+    if(showBrushControls){
+      console.log("closeBrushControls");
+      closeBrushControls();
+    }
     setIsDrawing(true);
     setLastPoint(null);
     if (event && event.nativeEvent) {
@@ -1162,87 +1180,123 @@ const PhotoEditScreen = () => {
 
               {/* //? Fırça Kontrol Butonları */}
               {image && step === 1 && (
-                <View style={styles.floatingButtonContainer}>
-                  {/* //? Silme Modu Butonu */}
-                  <TouchableOpacity
-                    style={[
-                      styles.floatingButton,
-                      eraseMode ? styles.eraseActive : null,
-                    ]}
-                    onPress={() => setEraseMode((v) => !v)}
-                  >
-                    <Svg
-                      width={18}
-                      height={18}
-                      viewBox="0 0 256.00098 256"
-                      fill="none"
-                      color={eraseMode ? COLORS.background : COLORS.text}
+                <>
+                  {/* Fırça kontrol paneli açıkken overlay - dışarı tıklayınca kapat */}
+                  {showBrushControls && (
+                    <TouchableOpacity
+                      style={styles.brushControlsOverlay}
+                      activeOpacity={1}
+                      onPress={closeBrushControls}
+                    />
+                  )}
+
+                  <View style={styles.floatingButtonContainer}>
+                    {/* //? Silme Modu Butonu */}
+                    <TouchableOpacity
+                      style={[
+                        styles.floatingButton,
+                        eraseMode ? styles.eraseActive : null,
+                      ]}
+                      onPress={() => setEraseMode((v) => !v)}
                     >
-                      <Path
-                        d="M216.001,207.833H130.34375l34.72949-34.72949.0166-.01465.01465-.0166,56.55371-56.55274a24.02962,24.02962,0,0,0,0-33.94141L176.40332,37.32324a24.0007,24.0007,0,0,0-33.94141,0L85.90283,93.88232l-.01025.00928-.00928.01026L29.32422,150.46094a24.00066,24.00066,0,0,0,0,33.9414l37.08887,37.08789a8.00232,8.00232,0,0,0,5.65722,2.34278H216.001a8,8,0,0,0,0-16ZM153.77637,48.6377a7.99708,7.99708,0,0,1,11.3125,0l45.25488,45.25488a8.00888,8.00888,0,0,1,0,11.31347l-50.91113,50.91114L102.86475,99.54932Z"
-                        fill="currentColor"
+                      <Svg
+                        width={18}
+                        height={18}
+                        viewBox="0 0 256.00098 256"
+                        fill="none"
+                        color={eraseMode ? COLORS.background : COLORS.text}
+                      >
+                        <Path
+                          d="M216.001,207.833H130.34375l34.72949-34.72949.0166-.01465.01465-.0166,56.55371-56.55274a24.02962,24.02962,0,0,0,0-33.94141L176.40332,37.32324a24.0007,24.0007,0,0,0-33.94141,0L85.90283,93.88232l-.01025.00928-.00928.01026L29.32422,150.46094a24.00066,24.00066,0,0,0,0,33.9414l37.08887,37.08789a8.00232,8.00232,0,0,0,5.65722,2.34278H216.001a8,8,0,0,0,0-16ZM153.77637,48.6377a7.99708,7.99708,0,0,1,11.3125,0l45.25488,45.25488a8.00888,8.00888,0,0,1,0,11.31347l-50.91113,50.91114L102.86475,99.54932Z"
+                          fill="currentColor"
+                        />
+                      </Svg>
+                    </TouchableOpacity>
+
+                    {/* //? Fırça Kontrol Butonu */}
+                    <TouchableOpacity
+                      style={styles.floatingButton}
+                      onPress={toggleBrushControls}
+                    >
+                      <Ionicons
+                        name={showBrushControls ? "brush" : "brush-outline"}
+                        size={16}
+                        color={COLORS.text}
                       />
-                    </Svg>
-                  </TouchableOpacity>
+                    </TouchableOpacity>
 
-                  {/* //? Fırça Kontrol Butonu */}
-                  <TouchableOpacity
-                    style={styles.floatingButton}
-                    onPress={toggleBrushControls}
-                  >
-                    <Ionicons
-                      name={showBrushControls ? "brush" : "brush-outline"}
-                      size={16}
-                      color={COLORS.text}
-                    />
-                  </TouchableOpacity>
+                    {/* //? Seçimi Temizle butonu */}
+                    <TouchableOpacity
+                      style={[styles.floatingButton]}
+                      onPress={clearDrawing}
+                    >
+                      <Ionicons name="trash" size={16} color={COLORS.text} />
+                    </TouchableOpacity>
 
-                  {/* //? Seçimi Temizle butonu */}
-                  <TouchableOpacity
-                    style={[styles.floatingButton]}
-                    onPress={clearDrawing}
-                  >
-                    <Ionicons name="trash" size={16} color={COLORS.text} />
-                  </TouchableOpacity>
-
-                  {/* //? Fırça Boyutu kontrolleri Modal */}
-                  <Animated.View
-                    pointerEvents="auto"
-                    style={[
-                      {
-                        transform: [
-                          {
-                            translateX: brushControlsAnimation.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [100, 0],
-                            }),
-                          },
-                        ],
-                        opacity: brushControlsAnimation,
-                        position: "absolute",
-                        zIndex: 1000,
-                        backgroundColor: COLORS.background,
-                        borderRadius: 20,
-                        left: 35,
-                        padding: 3,
-                      },
-                    ]}
-                  >
-                    <Slider
-                      style={{
-                        width: 250,
-                        height: 35,
-                      }}
-                      minimumValue={MIN_BRUSH_RADIUS}
-                      maximumValue={MAX_BRUSH_RADIUS}
-                      value={brushSize}
-                      onValueChange={updateBrushSize}
-                      minimumTrackTintColor={COLORS.text}
-                      maximumTrackTintColor={COLORS.text}
-                      thumbTintColor={COLORS.text}
-                    />
-                  </Animated.View>
-                </View>
+                    {/* //? Fırça Boyutu kontrolleri Modal */}
+                    <Animated.View
+                      pointerEvents="auto"
+                      style={[
+                        styles.brushControlsPanel,
+                        {
+                          transform: [
+                            {
+                              translateX: brushControlsAnimation.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [100, 0],
+                              }),
+                            },
+                          ],
+                          opacity: brushControlsAnimation,
+                        },
+                      ]}
+                    >
+                      {Platform.OS === 'ios' ? (
+                        // iOS için Slider
+                        <Slider
+                          style={{
+                            width: 250,
+                            height: 35,
+                          }}
+                          minimumValue={MIN_BRUSH_RADIUS}
+                          maximumValue={MAX_BRUSH_RADIUS}
+                          value={brushSize}
+                          onValueChange={updateBrushSize}
+                          minimumTrackTintColor={COLORS.text}
+                          maximumTrackTintColor={COLORS.text}
+                          thumbTintColor={COLORS.text}
+                        />
+                      ) : (
+                        // Android için + - Buton Sistemi
+                        <View style={styles.brushControlsAndroid}>
+                          <TouchableOpacity 
+                            style={styles.brushButton}
+                            onPress={() => {
+                              const newSize = Math.max(MIN_BRUSH_RADIUS, brushSize - 2);
+                              updateBrushSize(newSize);
+                            }}
+                          >
+                            <Text style={styles.brushButtonText}>−</Text>
+                          </TouchableOpacity>
+                          
+                          <View style={styles.brushSizeDisplay}>
+                            <Text style={styles.brushSizeText}>{Math.round(brushSize)}</Text>
+                          </View>
+                          
+                          <TouchableOpacity 
+                            style={styles.brushButton}
+                            onPress={() => {
+                              const newSize = Math.min(MAX_BRUSH_RADIUS, brushSize + 2);
+                              updateBrushSize(newSize);
+                            }}
+                          >
+                            <Text style={styles.brushButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </Animated.View>
+                  </View>
+                </>
               )}
 
               {step === 2 && (
@@ -1694,6 +1748,63 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.text,
     borderColor: COLORS.background,
     color: COLORS.background,
+  },
+  // Brush Controls Overlay - dışarı tıklayınca kapat
+  brushControlsOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 900, // Fırça panelinin altında
+    backgroundColor: 'transparent',
+  },
+  // Brush Controls Panel
+  brushControlsPanel: {
+    position: "absolute",
+    zIndex: 1000, // Overlay'in üstünde
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    left: 50,
+    padding: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  // Android Brush Controls
+  brushControlsAndroid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 8,
+  },
+  brushButton: {
+    backgroundColor: COLORS.text,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  brushButtonText: {
+    color: COLORS.background,
+    fontSize: 16,
+    fontWeight: 'bold',
+    lineHeight: 16,
+  },
+  brushSizeDisplay: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  brushSizeText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '600',
   },
   productItem: {
     width: 140,
