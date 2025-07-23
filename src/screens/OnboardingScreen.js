@@ -15,7 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useCameraPermission } from "react-native-vision-camera";
 import { COLORS } from "../constants/theme";
-import { PRODUCTS } from "../constants/products";
+
 import {
   ONBOARDING_STEPS,
   ONBOARDING_KEYS,
@@ -98,7 +98,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
       if (currentStep === ONBOARDING_STEPS.WELCOME) {
         Alert.alert(
           "Uygulamadan Çık",
-          "Bronzify ürünlerini öğrenmeden çıkmak istediğinizden emin misiniz?",
+          "Eda ürünlerini öğrenmeden çıkmak istediğinizden emin misiniz?",
           [
             { text: "Kalayım", style: "cancel" },
             {
@@ -246,7 +246,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
   const handleSkip = () => {
     Alert.alert(
       "Tanıtımı Atla",
-      "Bronzify ürünlerini test etmeyi öğrenmek istemez misiniz?",
+      "Eda ürünlerini test etmeyi öğrenmek istemez misiniz?",
       [
         { text: "Öğrenmek İstiyorum", style: "cancel" },
         {
@@ -272,11 +272,12 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
       ]}
     >
       <View style={styles.welcomeHeader}>
+        <Image source={require("../assets/logo.png")} style={styles.welcomeLogo} />
         <Text style={styles.welcomeTitle}>
-          Bronzify Uygulamasına Hoş Geldiniz! ✨
+          Eda Uygulamasına Hoş Geldiniz! ✨
         </Text>
         <Text style={styles.welcomeSubtitle}>
-          Bronzlaştırıcı kremlerinizi satın almadan önce test edin
+          Eda Taşpınar ürünlerini satın almadan önce test edin
         </Text>
       </View>
 
@@ -302,7 +303,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
       </View>
 
       <Text style={styles.welcomeDescription}>
-        Bronzify ürünlerinin sizde nasıl duracağını önceden görmek için
+        Eda Taşpınar ürünlerinin sizde nasıl duracağını önceden görmek için
         uygulamayı keşfedelim. Hangi krem sizin için ideal?
       </Text>
     </Animated.View>
@@ -317,7 +318,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
     >
       <Text style={styles.stepTitle}>🎨 İki Farklı Deneyim</Text>
       <Text style={styles.stepSubtitle}>
-        Bronzify ürünlerini test etmenin iki benzersiz yolu
+        Eda Taşpınar ürünlerini test etmenin iki benzersiz yolu
       </Text>
 
       <View style={styles.featuresGrid}>
@@ -371,7 +372,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
             <Text style={styles.featureCardTitle}>İndirim Kodu Kazanın</Text>
           </View>
           <Text style={styles.featureCardDescription}>
-            Sonuçlarınızı paylaşın, Bronzify'da indirim kazanın
+            Sonuçlarınızı paylaşın, Eda'da indirim kazanın
           </Text>
         </Animated.View>
       </View>
@@ -391,7 +392,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
 
       <Text style={styles.stepTitle}>Kamera İzni</Text>
       <Text style={styles.stepSubtitle}>
-        Bronzify ürünlerini yüzünüzde test etmek için kamera erişimi gerekli
+        Eda Taşpınar ürünlerini yüzünüzde test etmek için kamera erişimi gerekli
       </Text>
 
       <View style={styles.permissionBenefits}>
@@ -410,7 +411,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
         <View style={styles.permissionBenefit}>
           <Ionicons name="checkmark-circle" size={20} color={COLORS.text} />
           <Text style={styles.permissionBenefitText}>
-            Sonucu fotoğraflayıp Bronzify'da satın alın
+            Sonucu fotoğraflayıp Eda'da satın alın
           </Text>
         </View>
       </View>
@@ -419,7 +420,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
         <Ionicons name="shield-checkmark" size={16} color={COLORS.text} />
         <Text style={styles.permissionNoteText}>
           Kamera verileriniz güvenlidir ve sadece uygulamada kullanılır.
-          Bronzify hiçbir veriyi saklamaz.
+          Eda hiçbir veriyi saklamaz.
         </Text>
       </View>
     </Animated.View>
@@ -439,7 +440,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
 
         <Text style={styles.stepTitle}>🚀 Nasıl Kullanılır?</Text>
         <Text style={styles.stepSubtitle}>
-          Bronzify ürünlerini test etmek çok kolay!
+          Eda Taşpınar ürünlerini test etmek çok kolay!
         </Text>
 
         <View style={styles.tutorialMethods}>
@@ -511,7 +512,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
         <View style={styles.tutorialReward}>
           <Ionicons name="gift" size={24} color={COLORS.text} />
           <Text style={styles.tutorialRewardText}>
-            Sonuçlarınızı paylaştığınızda Bronzify'da kullanabileceğiniz indirim
+            Sonuçlarınızı paylaştığınızda Eda'da kullanabileceğiniz indirim
             kodu kazanırsınız!
           </Text>
         </View>
@@ -913,6 +914,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginRight: 5,
+  },
+  welcomeLogo:{
+    width: 100,
+    height: 100,
   },
 });
 

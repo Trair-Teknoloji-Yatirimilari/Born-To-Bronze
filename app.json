@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Bronze Cream",
+    "name": "Eda",
     "slug": "bronze-cream",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F4EBD0"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -18,15 +18,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.bronzecream.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Bronze Cream uygulamasının kameranıza erişmesine izin verin",
-        "NSPhotoLibraryUsageDescription": "Bronze Cream uygulamasının fotoğraflarınıza erişmesine izin verin",
+        "NSCameraUsageDescription": "Eda uygulamasının kameranıza erişmesine izin verin",
+        "NSPhotoLibraryUsageDescription": "Eda uygulamasının fotoğraflarınıza erişmesine izin verin",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "buildNumber": "1" 
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#F4EBD0"
       },
       "package": "com.bronzecream.app",
       "permissions": [
@@ -54,7 +55,7 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Bronze Cream uygulamasının kameranıza erişmesine izin verin"
+          "cameraPermissionText": "Eda uygulamasının kameranıza erişmesine izin verin"
         }
       ]
     ],

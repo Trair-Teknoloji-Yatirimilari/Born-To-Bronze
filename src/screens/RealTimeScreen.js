@@ -51,7 +51,7 @@ const API_URL = 'https://kafanagoreya.yumru.dev'
 //       ios: "http://192.168.1.29:3000",
 //       android: "http://10.0.2.2:3000",
 //     })
-//   : "https://your-production-api.com";
+//   : "https://kafanagoreya.yumru.dev";
 
 // Device bilgilerini toplayan utility fonksiyon
 const getDeviceInfo = async () => {

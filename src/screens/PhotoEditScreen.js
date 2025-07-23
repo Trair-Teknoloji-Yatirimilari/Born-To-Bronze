@@ -16,6 +16,7 @@ import {
   useAnimatedValue,
   StatusBar,
   Linking,
+  SafeAreaView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Slider from "@react-native-community/slider";
@@ -32,8 +33,9 @@ import { Buffer } from "buffer";
 import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
-import { PRODUCTS } from "../constants/products";
+
 import DeviceInfo from 'react-native-device-info';
+import Share from 'react-native-share';
 
 // Fırça boyutu için sabitleri güncelliyoruz
 const MIN_BRUSH_RADIUS = 5;
@@ -205,7 +207,7 @@ const API_URL = 'https://kafanagoreya.yumru.dev'
 //       ios: "http://192.168.1.29:3000",
 //       android: "http://10.0.2.2:3000",
 //     })
-//   : "https://your-production-api.com";
+//   : "https://kafanagoreya.yumru.dev";
 
 // Device bilgilerini toplayan utility fonksiyon
 const getDeviceInfo = async () => {
@@ -312,6 +314,18 @@ const PhotoEditScreen = () => {
   const [loadingSimilar, setLoadingSimilar] = useState(false);
   const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [PRODUCTS, setPRODUCTS] = useState([]);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      const response = await fetch(`${API_URL}/api/products?product=filter`);
+      const data = await response.json();
+      console.log(data.products)
+      setPRODUCTS(data.products);
+    } 
+    fetchProducts();
+  },[])
 
   // Bottom Tab Bar kontrolü - çizim aşamasında gizle
   useEffect(() => {
@@ -394,6 +408,8 @@ const PhotoEditScreen = () => {
 
     setLoading(true);
     try {
+      const deviceInfo = await getDeviceInfo();
+
       const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
         method: "POST",
         headers: {
@@ -401,11 +417,12 @@ const PhotoEditScreen = () => {
         },
         body: JSON.stringify({
           imageId: resultImageId,
+          uniqueId: deviceInfo.uniqueId,
         }),
       });
 
       const result = await response.json();
-      
+      console.log(result)
       if (result.success) {
         Alert.alert(
           "Başarılı! 🎉", 
@@ -791,7 +808,7 @@ const PhotoEditScreen = () => {
         type: "image/jpeg",
       });
       formData.append("mask", JSON.stringify(mask));
-      formData.append("selectedProduct", JSON.stringify(selectedProduct));
+      formData.append("selectedProduct", selectedProduct.id);
       formData.append("deviceInfo", JSON.stringify(deviceInfo));
 
       const response = await fetch(
@@ -988,624 +1005,708 @@ const PhotoEditScreen = () => {
     }
   };
 
+  // Paylaşım seçenekleri fonksiyonları
+  const handleShareApp = async () => {
+    setShareModalVisible(false);
+    await sharePhoto();
+  };
+  const handleShareWhatsApp = async () => {
+    setShareModalVisible(false);
+    if (!resultImage) {
+      Alert.alert('Hata', 'Paylaşılacak fotoğraf bulunamadı!');
+      return;
+    }
+    try {
+      await Share.open({
+        url: resultImage,
+        social: Share.Social.WHATSAPP,
+        failOnCancel: false,
+      });
+    } catch (e) {}
+  };
+  const handleShareInstagram = async () => {
+    setShareModalVisible(false);
+    if (!resultImage) {
+      Alert.alert('Hata', 'Paylaşılacak fotoğraf bulunamadı!');
+      return;
+    }
+    try {
+      await Share.open({
+        url: resultImage,
+        social: Share.Social.INSTAGRAM,
+        failOnCancel: false,
+      });
+    } catch (e) {}
+  };
+  const handleShareOther = async () => {
+    setShareModalVisible(false);
+    if (!resultImage) {
+      Alert.alert('Hata', 'Paylaşılacak fotoğraf bulunamadı!');
+      return;
+    }
+    try {
+      await Share.open({
+        url: resultImage,
+        failOnCancel: false,
+      });
+    } catch (e) {}
+  };
+
   return (
-    <ImageBackground
-      source={require("../assets/welcome-bg.png")}
-      style={styles.background}
-    >
-      <LinearGradient
-        colors={["rgba(244, 235, 208, 0.5)", "rgba(244, 235, 208, 1)"]}
-        style={styles.container}
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F4EBD0' }}>
+      <ImageBackground
+        source={require("../assets/welcome-bg.png")}
+        style={styles.background}
       >
-        {step === 0 && (
-          <>
-            <View style={styles.step0Container}>
-              <Text style={styles.title}>Fotoğraf Seç</Text>
-              <Text style={styles.desc}>
-                Bronzlaştırıcı etkileri denemek için hemen bir fotoğraf seçmen
-                yeterli!
-              </Text>
-              <View style={styles.actions}>
-                <Text style={styles.actionText}>
-                  Yüz veya vücut bölgelerine bronzlaştırıcı krem uygulamak için
-                  hemen{" "}
+        <LinearGradient
+          colors={["rgba(244, 235, 208, 0.5)", "rgba(244, 235, 208, 1)"]}
+          style={styles.container}
+        >
+          {step === 0 && (
+            <>
+              <View style={styles.step0Container}>
+                <Text style={styles.title}>Fotoğraf Seç</Text>
+                <Text style={styles.desc}>
+                  Bronzlaştırıcı etkileri denemek için hemen bir fotoğraf seçmen
+                  yeterli!
                 </Text>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={takePhoto}
-                >
-                  <Ionicons name="camera" size={24} color={COLORS.text} />
-                  <Text>Kamerayı açın</Text>
-                </TouchableOpacity>
-                <Text style={styles.actionText}>
-                  veya hızlıca dilediğiniz bir fotoğrafı
-                </Text>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={pickImage}
-                >
-                  <Ionicons name="image" size={24} color={COLORS.text} />
-                  <Text>Galeriden seçin</Text>
-                </TouchableOpacity>
-                <Text style={styles.actionText}>ve değişimi görün!</Text>
-              </View>
-            </View>
-          </>
-        )}
-
-        {step !== 0 && step !== 3 && (
-          <>
-            <View style={styles.step1Container}>
-              <TouchableOpacity
-                style={styles.floatingTopNavBack}
-                onPress={() => {
-                  if (step === 1) {
-                    clearImage();
-                  } else if (step === 2) {
-                    setStep(1);
-                  }
-                }}
-              >
-                <Text style={styles.floatingTopNavText}>Geri Dön</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.floatingTopNavNext,
-                  (step === 1 &&
-                    paths.length > 0 &&
-                    styles.floatingTopNavActive) ||
-                    (step === 2 &&
-                      selectedProduct &&
-                      styles.floatingTopNavActive),
-                ]}
-                onPress={() => {
-                  if (step === 1) {
-                    setStep(2);
-                  } else if (step === 2) {
-                    applyBronzeEffect();
-                  }
-                }}
-                disabled={
-                  (step === 1 && (loading || !image || paths.length === 0)) ||
-                  (step === 2 &&
-                    (loading ||
-                      !image ||
-                      paths.length === 0 ||
-                      !selectedProduct))
-                }
-              >
-                {step === 1 && (
-                  <Text style={styles.floatingTopNavText}>Çizimi Tamamla</Text>
-                )}
-                {step === 2 && (
-                  <Text style={styles.floatingTopNavText}>
-                    Bronz Efekti Uygula
-                    {loading && (
-                      <ActivityIndicator color={COLORS.text} size="small" />
-                    )}
+                <View style={styles.actions}>
+                  <Text style={styles.actionText}>
+                    Yüz veya vücut bölgelerine bronzlaştırıcı krem uygulamak için
+                    hemen{" "}
                   </Text>
-                )}
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={takePhoto}
+                  >
+                    <Ionicons name="camera" size={24} color={COLORS.text} />
+                    <Text>Kamerayı açın</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.actionText}>
+                    veya hızlıca dilediğiniz bir fotoğrafı
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={pickImage}
+                  >
+                    <Ionicons name="image" size={24} color={COLORS.text} />
+                    <Text>Galeriden seçin</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.actionText}>ve değişimi görün!</Text>
+                </View>
+              </View>
+            </>
+          )}
 
-              <View 
-                style={styles.imageContainer}
-                onLayout={(e) => {
-                  const { x, y, width, height } = e.nativeEvent.layout;
-                  setContainerLayout({ x, y, width, height });
-                  setDisplaySize({ width, height }); // displaySize de container boyutları
-                }}
-              >
-                <Image
-                  ref={imageRef}
-                  source={{ uri: image }}
-                  style={styles.image}
-                  resizeMode="cover"
-                  onLoad={onImageLoad}
-                />
-                
-                <PanGestureHandler
-                  onGestureEvent={
-                    step === 1
-                      ? eraseMode
-                        ? onEraseGestureEvent
-                        : onGestureEvent
-                      : () => {}
-                  }
-                  onHandlerStateChange={({ nativeEvent }) => {
-                    const s = nativeEvent.state;
-                    if (s === GestureState.BEGAN) {
-                      onGestureStart(nativeEvent);
-                    } else if (
-                      s === GestureState.END ||
-                      s === GestureState.CANCELLED ||
-                      s === GestureState.FAILED
-                    ) {
-                      onGestureEnd();
+          {step !== 0 && step !== 3 && (
+            <>
+              <View style={styles.step1Container}>
+                <TouchableOpacity
+                  style={styles.floatingTopNavBack}
+                  onPress={() => {
+                    if (step === 1) {
+                      clearImage();
+                    } else if (step === 2) {
+                      setStep(1);
                     }
                   }}
                 >
-                  <Animated.View style={StyleSheet.absoluteFill}>
-                  <Svg style={StyleSheet.absoluteFill}>
-                    {paths.map((p, index) => (
-                      <Path
-                        key={index}
-                        d={p.points.reduce((acc, point, i) => {
-                          if (i === 0) return `M ${point.x} ${point.y}`;
-                          return `${acc} L ${point.x} ${point.y}`;
-                        }, "")}
-                        stroke={BRUSH_COLOR}
-                        strokeWidth={p.brush * 2}
-                        fill="none"
-                        strokeLinejoin="round"
-                        strokeLinecap="round"
-                      />
-                    ))}
-                    {currentPath.points && currentPath.points.length > 1 && (
-                      <Path
-                        d={currentPath.points.reduce((acc, point, i) => {
-                          if (i === 0) return `M ${point.x} ${point.y}`;
-                          return `${acc} L ${point.x} ${point.y}`;
-                        }, "")}
-                        stroke={BRUSH_COLOR}
-                        strokeWidth={currentPath.brush * 2}
-                        fill="none"
-                        strokeLinejoin="round"
-                        strokeLinecap="round"
-                      />
-                    )}
-                    {isDrawing && brushPos && !eraseMode && (
-                      <Circle
-                        cx={brushPos.x}
-                        cy={brushPos.y}
-                        r={brushSize}
-                        fill={BRUSH_COLOR}
-                        stroke="#00FF00"
-                        strokeWidth={2}
-                      />
-                    )}
-                    {isDrawing && brushPos && eraseMode && (
-                      <Circle
-                        cx={brushPos.x}
-                        cy={brushPos.y}
-                        r={brushSize}
-                        fill="rgba(255,0,0,0.15)"
-                        stroke="#FF0000"
-                        strokeWidth={2}
-                      />
-                    )}
-                  </Svg>
-                </Animated.View>
-              </PanGestureHandler>
-              </View>
-
-              {/* //? Fırça Kontrol Butonları */}
-              {image && step === 1 && (
-                <>
-                  {/* Fırça kontrol paneli açıkken overlay - dışarı tıklayınca kapat */}
-                  {showBrushControls && (
-                    <TouchableOpacity
-                      style={styles.brushControlsOverlay}
-                      activeOpacity={1}
-                      onPress={closeBrushControls}
-                    />
+                  <Text style={styles.floatingTopNavText}>Geri Dön</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.floatingTopNavNext,
+                    (step === 1 &&
+                      paths.length > 0 &&
+                      styles.floatingTopNavActive) ||
+                      (step === 2 &&
+                        selectedProduct &&
+                        styles.floatingTopNavActive),
+                  ]}
+                  onPress={() => {
+                    if (step === 1) {
+                      setStep(2);
+                    } else if (step === 2) {
+                      applyBronzeEffect();
+                    }
+                  }}
+                  disabled={
+                    (step === 1 && (loading || !image || paths.length === 0)) ||
+                    (step === 2 &&
+                      (loading ||
+                        !image ||
+                        paths.length === 0 ||
+                        !selectedProduct))
+                  }
+                >
+                  {step === 1 && (
+                    <Text style={styles.floatingTopNavText}>Çizimi Tamamla ve Bronzlaştırıcı Ürün Seç</Text>
                   )}
+                  {step === 2 && (
+                    <Text style={styles.floatingTopNavText}>
+                      Bronz Efekti Uygula
+                      {loading && (
+                        <ActivityIndicator color={COLORS.text} size="small" />
+                      )}
+                    </Text>
+                  )}
+                </TouchableOpacity>
 
-                  <View style={styles.floatingButtonContainer}>
-                    {/* //? Silme Modu Butonu */}
-                    <TouchableOpacity
-                      style={[
-                        styles.floatingButton,
-                        eraseMode ? styles.eraseActive : null,
-                      ]}
-                      onPress={() => setEraseMode((v) => !v)}
-                    >
-                      <Svg
-                        width={18}
-                        height={18}
-                        viewBox="0 0 256.00098 256"
-                        fill="none"
-                        color={eraseMode ? COLORS.background : COLORS.text}
-                      >
+                <View 
+                  style={styles.imageContainer}
+                  onLayout={(e) => {
+                    const { x, y, width, height } = e.nativeEvent.layout;
+                    setContainerLayout({ x, y, width, height });
+                    setDisplaySize({ width, height }); // displaySize de container boyutları
+                  }}
+                >
+                  <Image
+                    ref={imageRef}
+                    source={{ uri: image }}
+                    style={styles.image}
+                    resizeMode="cover"
+                    onLoad={onImageLoad}
+                  />
+                  
+                  <PanGestureHandler
+                    onGestureEvent={
+                      step === 1
+                        ? eraseMode
+                          ? onEraseGestureEvent
+                          : onGestureEvent
+                        : () => {}
+                    }
+                    onHandlerStateChange={({ nativeEvent }) => {
+                      const s = nativeEvent.state;
+                      if (s === GestureState.BEGAN) {
+                        onGestureStart(nativeEvent);
+                      } else if (
+                        s === GestureState.END ||
+                        s === GestureState.CANCELLED ||
+                        s === GestureState.FAILED
+                      ) {
+                        onGestureEnd();
+                      }
+                    }}
+                  >
+                    <Animated.View style={StyleSheet.absoluteFill}>
+                    <Svg style={StyleSheet.absoluteFill}>
+                      {paths.map((p, index) => (
                         <Path
-                          d="M216.001,207.833H130.34375l34.72949-34.72949.0166-.01465.01465-.0166,56.55371-56.55274a24.02962,24.02962,0,0,0,0-33.94141L176.40332,37.32324a24.0007,24.0007,0,0,0-33.94141,0L85.90283,93.88232l-.01025.00928-.00928.01026L29.32422,150.46094a24.00066,24.00066,0,0,0,0,33.9414l37.08887,37.08789a8.00232,8.00232,0,0,0,5.65722,2.34278H216.001a8,8,0,0,0,0-16ZM153.77637,48.6377a7.99708,7.99708,0,0,1,11.3125,0l45.25488,45.25488a8.00888,8.00888,0,0,1,0,11.31347l-50.91113,50.91114L102.86475,99.54932Z"
-                          fill="currentColor"
+                          key={index}
+                          d={p.points.reduce((acc, point, i) => {
+                            if (i === 0) return `M ${point.x} ${point.y}`;
+                            return `${acc} L ${point.x} ${point.y}`;
+                          }, "")}
+                          stroke={BRUSH_COLOR}
+                          strokeWidth={p.brush * 2}
+                          fill="none"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
                         />
-                      </Svg>
-                    </TouchableOpacity>
+                      ))}
+                      {currentPath.points && currentPath.points.length > 1 && (
+                        <Path
+                          d={currentPath.points.reduce((acc, point, i) => {
+                            if (i === 0) return `M ${point.x} ${point.y}`;
+                            return `${acc} L ${point.x} ${point.y}`;
+                          }, "")}
+                          stroke={BRUSH_COLOR}
+                          strokeWidth={currentPath.brush * 2}
+                          fill="none"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                      )}
+                      {isDrawing && brushPos && !eraseMode && (
+                        <Circle
+                          cx={brushPos.x}
+                          cy={brushPos.y}
+                          r={brushSize}
+                          fill={BRUSH_COLOR}
+                          stroke="#00FF00"
+                          strokeWidth={2}
+                        />
+                      )}
+                      {isDrawing && brushPos && eraseMode && (
+                        <Circle
+                          cx={brushPos.x}
+                          cy={brushPos.y}
+                          r={brushSize}
+                          fill="rgba(255,0,0,0.15)"
+                          stroke="#FF0000"
+                          strokeWidth={2}
+                        />
+                      )}
+                    </Svg>
+                  </Animated.View>
+                </PanGestureHandler>
+                </View>
 
-                    {/* //? Fırça Kontrol Butonu */}
-                    <TouchableOpacity
-                      style={styles.floatingButton}
-                      onPress={toggleBrushControls}
-                    >
-                      <Ionicons
-                        name={showBrushControls ? "brush" : "brush-outline"}
-                        size={16}
-                        color={COLORS.text}
+                {/* //? Fırça Kontrol Butonları */}
+                {image && step === 1 && (
+                  <>
+                    {/* Fırça kontrol paneli açıkken overlay - dışarı tıklayınca kapat */}
+                    {showBrushControls && (
+                      <TouchableOpacity
+                        style={styles.brushControlsOverlay}
+                        activeOpacity={1}
+                        onPress={closeBrushControls}
                       />
-                    </TouchableOpacity>
+                    )}
 
-                    {/* //? Seçimi Temizle butonu */}
-                    <TouchableOpacity
-                      style={[styles.floatingButton]}
-                      onPress={clearDrawing}
-                    >
-                      <Ionicons name="trash" size={16} color={COLORS.text} />
-                    </TouchableOpacity>
+                    <View style={styles.floatingButtonContainer}>
+                      {/* //? Silme Modu Butonu */}
+                      <TouchableOpacity
+                        style={[
+                          styles.floatingButton,
+                          eraseMode ? styles.eraseActive : null,
+                        ]}
+                        onPress={() => setEraseMode((v) => !v)}
+                      >
+                        <Svg
+                          width={18}
+                          height={18}
+                          viewBox="0 0 256.00098 256"
+                          fill="none"
+                          color={eraseMode ? COLORS.background : COLORS.text}
+                        >
+                          <Path
+                            d="M216.001,207.833H130.34375l34.72949-34.72949.0166-.01465.01465-.0166,56.55371-56.55274a24.02962,24.02962,0,0,0,0-33.94141L176.40332,37.32324a24.0007,24.0007,0,0,0-33.94141,0L85.90283,93.88232l-.01025.00928-.00928.01026L29.32422,150.46094a24.00066,24.00066,0,0,0,0,33.9414l37.08887,37.08789a8.00232,8.00232,0,0,0,5.65722,2.34278H216.001a8,8,0,0,0,0-16ZM153.77637,48.6377a7.99708,7.99708,0,0,1,11.3125,0l45.25488,45.25488a8.00888,8.00888,0,0,1,0,11.31347l-50.91113,50.91114L102.86475,99.54932Z"
+                            fill="currentColor"
+                          />
+                        </Svg>
+                      </TouchableOpacity>
 
-                    {/* //? Fırça Boyutu kontrolleri Modal */}
+                      {/* //? Fırça Kontrol Butonu */}
+                      <TouchableOpacity
+                        style={styles.floatingButton}
+                        onPress={toggleBrushControls}
+                      >
+                        <Ionicons
+                          name={showBrushControls ? "brush" : "brush-outline"}
+                          size={16}
+                          color={COLORS.text}
+                        />
+                      </TouchableOpacity>
+
+                      {/* //? Seçimi Temizle butonu */}
+                      <TouchableOpacity
+                        style={[styles.floatingButton]}
+                        onPress={clearDrawing}
+                      >
+                        <Ionicons name="trash" size={16} color={COLORS.text} />
+                      </TouchableOpacity>
+
+                      {/* //? Fırça Boyutu kontrolleri Modal */}
+                      <Animated.View
+                        pointerEvents="auto"
+                        style={[
+                          styles.brushControlsPanel,
+                          {
+                            transform: [
+                              {
+                                translateX: brushControlsAnimation.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [100, 0],
+                                }),
+                              },
+                            ],
+                            opacity: brushControlsAnimation,
+                          },
+                        ]}
+                      >
+                        {Platform.OS === 'ios' ? (
+                          // iOS için Slider
+                          <Slider
+                            style={{
+                              width: 250,
+                              height: 35,
+                            }}
+                            minimumValue={MIN_BRUSH_RADIUS}
+                            maximumValue={MAX_BRUSH_RADIUS}
+                            value={brushSize}
+                            onValueChange={updateBrushSize}
+                            minimumTrackTintColor={COLORS.text}
+                            maximumTrackTintColor={COLORS.text}
+                            thumbTintColor={COLORS.text}
+                          />
+                        ) : (
+                          // Android için + - Buton Sistemi
+                          <View style={styles.brushControlsAndroid}>
+                            <TouchableOpacity 
+                              style={styles.brushButton}
+                              onPress={() => {
+                                const newSize = Math.max(MIN_BRUSH_RADIUS, brushSize - 2);
+                                updateBrushSize(newSize);
+                              }}
+                            >
+                              <Text style={styles.brushButtonText}>−</Text>
+                            </TouchableOpacity>
+                            
+                            <View style={styles.brushSizeDisplay}>
+                              <Text style={styles.brushSizeText}>{Math.round(brushSize)}</Text>
+                            </View>
+                            
+                            <TouchableOpacity 
+                              style={styles.brushButton}
+                              onPress={() => {
+                                const newSize = Math.min(MAX_BRUSH_RADIUS, brushSize + 2);
+                                updateBrushSize(newSize);
+                              }}
+                            >
+                              <Text style={styles.brushButtonText}>+</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </Animated.View>
+                    </View>
+                  </>
+                )}
+
+                {step === 2 && (
+                  <Animated.View
+                    style={[
+                      styles.productsOverlay,
+                      {
+                        opacity: productAnimationValue,
+                        transform: [
+                          {
+                            translateY: productAnimationValue.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [100, 0],
+                            }),
+                          },
+                          {
+                            scale: productAnimationValue.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.9, 1],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
                     <Animated.View
-                      pointerEvents="auto"
                       style={[
-                        styles.brushControlsPanel,
+                        styles.productsHeader,
                         {
+                          opacity: productAnimationValue.interpolate({
+                            inputRange: [0, 0.5, 1],
+                            outputRange: [0, 0, 1],
+                          }),
                           transform: [
                             {
-                              translateX: brushControlsAnimation.interpolate({
+                              translateY: productAnimationValue.interpolate({
                                 inputRange: [0, 1],
-                                outputRange: [100, 0],
+                                outputRange: [20, 0],
                               }),
                             },
                           ],
-                          opacity: brushControlsAnimation,
                         },
                       ]}
                     >
-                      {Platform.OS === 'ios' ? (
-                        // iOS için Slider
-                        <Slider
-                          style={{
-                            width: 250,
-                            height: 35,
-                          }}
-                          minimumValue={MIN_BRUSH_RADIUS}
-                          maximumValue={MAX_BRUSH_RADIUS}
-                          value={brushSize}
-                          onValueChange={updateBrushSize}
-                          minimumTrackTintColor={COLORS.text}
-                          maximumTrackTintColor={COLORS.text}
-                          thumbTintColor={COLORS.text}
-                        />
-                      ) : (
-                        // Android için + - Buton Sistemi
-                        <View style={styles.brushControlsAndroid}>
-                          <TouchableOpacity 
-                            style={styles.brushButton}
-                            onPress={() => {
-                              const newSize = Math.max(MIN_BRUSH_RADIUS, brushSize - 2);
-                              updateBrushSize(newSize);
-                            }}
-                          >
-                            <Text style={styles.brushButtonText}>−</Text>
-                          </TouchableOpacity>
-                          
-                          <View style={styles.brushSizeDisplay}>
-                            <Text style={styles.brushSizeText}>{Math.round(brushSize)}</Text>
-                          </View>
-                          
-                          <TouchableOpacity 
-                            style={styles.brushButton}
-                            onPress={() => {
-                              const newSize = Math.min(MAX_BRUSH_RADIUS, brushSize + 2);
-                              updateBrushSize(newSize);
-                            }}
-                          >
-                            <Text style={styles.brushButtonText}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
+                      <Text style={styles.productsTitle}>Ürün Seçin</Text>
+                      <Text style={styles.productsSubtitle}>
+                        Bronzlaştırıcı kremlerin arasından birini seçin
+                      </Text>
                     </Animated.View>
-                  </View>
-                </>
-              )}
-
-              {step === 2 && (
-                <Animated.View
-                  style={[
-                    styles.productsOverlay,
-                    {
-                      opacity: productAnimationValue,
-                      transform: [
-                        {
-                          translateY: productAnimationValue.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [100, 0],
-                          }),
-                        },
-                        {
-                          scale: productAnimationValue.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.9, 1],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                >
-                  <Animated.View
-                    style={[
-                      styles.productsHeader,
-                      {
-                        opacity: productAnimationValue.interpolate({
-                          inputRange: [0, 0.5, 1],
-                          outputRange: [0, 0, 1],
-                        }),
-                        transform: [
-                          {
-                            translateY: productAnimationValue.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [20, 0],
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
-                  >
-                    <Text style={styles.productsTitle}>Ürün Seçin</Text>
-                    <Text style={styles.productsSubtitle}>
-                      Bronzlaştırıcı kremlerin arasından birini seçin
-                    </Text>
-                  </Animated.View>
-                  <Animated.View
-                    style={[
-                      styles.productsScrollContainer,
-                      {
-                        opacity: productAnimationValue.interpolate({
-                          inputRange: [0, 0.3, 1],
-                          outputRange: [0, 0, 1],
-                        }),
-                        transform: [
-                          {
-                            translateY: productAnimationValue.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [30, 0],
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
-                  >
-                    <FlatList
-                      data={PRODUCTS}
-                      renderItem={({ item }) => <ProductItem product={item} />}
-                      keyExtractor={(item) => item.id.toString()}
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.productsListContent}
-                      ItemSeparatorComponent={() => (
-                        <View style={styles.productSeparator} />
-                      )}
-                    />
-                  </Animated.View>
-                </Animated.View>
-              )}
-            </View>
-
-            {loading && (
-              <Modal transparent visible animationType="fade">
-                <View style={styles.loadingOverlay}>
-                  <ActivityIndicator size="large" color={COLORS.text} />
-                  <Text style={styles.loadingText}>
-                    Bronz efekti uygulanıyor...
-                  </Text>
-                </View>
-              </Modal>
-            )}
-          </>
-        )}
-        {step === 3 && (
-          <ScrollView
-            style={{
-              flex: 1,
-            }}
-          >
-            <View style={styles.step1Container}>
-              <TouchableOpacity
-                style={styles.floatingTopNavBack}
-                onPress={() => {
-                  setStep(2);
-                }}
-              >
-                <Text style={styles.floatingTopNavText}>Geri Dön</Text>
-              </TouchableOpacity>
-              <View style={styles.resultImageContainer}>
-                {/* Filtered (Result) Image */}
-                <Image
-                  source={{ uri: resultImage }}
-                  style={styles.resultImage}
-                  resizeMode="cover"
-                />
-                
-                {/* Interactive Overlay */}
-                <TouchableOpacity
-                  style={styles.resultImageOverlay}
-                  activeOpacity={1}
-                  onPressIn={showOriginalImage}
-                  onPressOut={hideOriginalImage}
-                >
-                  {/* Original Image Overlay */}
-                  {showOriginal && (
-                    <Animated.View 
+                    <Animated.View
                       style={[
-                        styles.originalImageOverlay,
-                        { opacity: originalImageOpacity }
+                        styles.productsScrollContainer,
+                        {
+                          opacity: productAnimationValue.interpolate({
+                            inputRange: [0, 0.3, 1],
+                            outputRange: [0, 0, 1],
+                          }),
+                          transform: [
+                            {
+                              translateY: productAnimationValue.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [30, 0],
+                              }),
+                            },
+                          ],
+                        },
                       ]}
                     >
-                      <Image
-                        source={{ uri: image }}
-                        style={styles.resultImage}
-                        resizeMode="cover"
+                      <FlatList
+                        data={PRODUCTS}
+                        renderItem={({ item }) => <ProductItem product={item} />}
+                        keyExtractor={(item) => item.id.toString()}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.productsListContent}
+                        ItemSeparatorComponent={() => (
+                          <View style={styles.productSeparator} />
+                        )}
                       />
-                      <View style={styles.originalImageLabel}>
-                        <Text style={styles.originalImageLabelText}>ORİJİNAL</Text>
-                      </View>
                     </Animated.View>
-                  )}
-                  
-                  {/* Touch Instructions */}
-                  <View style={styles.touchInstructions}>
-                    <Ionicons name="hand-left" size={20} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.touchInstructionsText}>
-                      Basılı tutarak orijinali gör
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.resultButtonsContainer}>
-                <TouchableOpacity 
-                  style={[styles.resultButtons, styles.shareButton]}
-                  onPress={sharePhoto}
-                  disabled={loading}
-                >
-                  <Ionicons name="share-social" size={20} color={COLORS.text} />
-                  <Text style={styles.buttonText}>
-                    {loading ? "Paylaşılıyor..." : "Paylaş"}
-                  </Text>
-                </TouchableOpacity>
-                <Text
-                  style={{
-                    textAlign: "center",
-                    fontSize: 12,
-                    color: COLORS.text,
-                  }}
-                >
-                  {`Fotoğrafınızı paylaşın ve sizin için özel oluşturulan indirim kodunu kaçırmayın!`}
-                </Text>
-                <TouchableOpacity style={styles.resultButtons} onPress={handlePurchase}>
-                  <Text>Hemen Satın Al</Text>
-                </TouchableOpacity>
-              </View>
-              {/* Benzer Fotoğraflar Bölümü */}
-              <View style={styles.similarPhotosSection}>
-                <View style={styles.similarPhotosHeader}>
-                  <Text style={styles.similarPhotosTitle}>
-                    {selectedProduct?.name} ile Yapılan Diğer Çalışmalar
-                  </Text>
-                  <Text style={styles.similarPhotosSubtitle}>
-                    Aynı ürünü kullanan diğer kullanıcıların sonuçlarını keşfet
-                  </Text>
-                </View>
-
-                {loadingSimilar ? (
-                  <View style={styles.similarPhotosLoading}>
-                    <ActivityIndicator size="large" color={COLORS.active} />
-                    <Text style={styles.loadingText}>Benzer çalışmalar yükleniyor...</Text>
-                  </View>
-                ) : similarPhotos.length > 0 ? (
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.similarPhotosScrollContent}
-                    style={styles.similarPhotosScroll}
-                  >
-                    {similarPhotos.map((photo, index) => (
-                      <TouchableOpacity
-                        key={photo.id}
-                        style={styles.similarPhotoItem}
-                        onPress={() => openPhotoModal(photo)}
-                        activeOpacity={0.8}
-                      >
-                        <Image
-                          source={{ uri: `${API_URL}${photo.url}` }}
-                          style={styles.similarPhotoImage}
-                          resizeMode="cover"
-                        />
-                        <LinearGradient
-                          colors={['transparent', 'rgba(0,0,0,0.6)']}
-                          style={styles.similarPhotoGradient}
-                        >
-                          <View style={styles.similarPhotoInfo}>
-                            <View style={styles.deviceBadge}>
-                              <Ionicons 
-                                name={photo.device === 'iPhone' ? 'phone-portrait' : 'phone-portrait-outline'} 
-                                size={10} 
-                                color="#FFFFFF" 
-                              />
-                              <Text style={styles.deviceText}>{photo.device}</Text>
-                            </View>
-                          </View>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                ) : (
-                  <View style={styles.noSimilarPhotos}>
-                    <Ionicons name="camera-outline" size={48} color={COLORS.text} />
-                    <Text style={styles.noSimilarPhotosTitle}>Henüz paylaşım yok</Text>
-                    <Text style={styles.noSimilarPhotosDesc}>
-                      Bu ürünle yapılan ilk paylaşım olacaksın!
-                    </Text>
-                  </View>
+                  </Animated.View>
                 )}
               </View>
-            </View>
-          </ScrollView>
-        )}
 
-        {/* Fotoğraf Büyük Görünüm Modal'ı */}
-        {selectedPhotoModal && (
-          <Modal transparent visible animationType="none">
-            <Animated.View 
-              style={[
-                styles.photoModal,
-                { opacity: modalOpacity }
-              ]}
+              {loading && (
+                <Modal transparent visible animationType="fade">
+                  <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color={COLORS.text} />
+                    <Text style={styles.loadingText}>
+                      Bronz efekti uygulanıyor...
+                    </Text>
+                  </View>
+                </Modal>
+              )}
+            </>
+          )}
+          {step === 3 && (
+            <ScrollView
+              contentContainerStyle={{
+                paddingBottom: 40,
+                minHeight: '100%',
+              }}
+              showsVerticalScrollIndicator={false}
             >
-              <TouchableOpacity 
-                style={styles.modalBackdrop}
-                onPress={closePhotoModal}
-                activeOpacity={1}
-              >
-                <View style={styles.modalContent}>
-                  <TouchableOpacity 
-                    style={styles.modalCloseButton}
-                    onPress={closePhotoModal}
-                  >
-                    <Ionicons name="close" size={28} color="#FFFFFF" />
-                  </TouchableOpacity>
-                  
+              <View style={styles.resultSectionContainer}>
+                <TouchableOpacity
+                  style={styles.floatingTopNavBack}
+                  onPress={() => {
+                    setStep(2);
+                  }}
+                >
+                  <Text style={styles.floatingTopNavText}>Geri Dön</Text>
+                </TouchableOpacity>
+                <View style={[styles.resultImageContainer]}> 
                   <Image
-                    source={{ uri: `${API_URL}${selectedPhotoModal.url}` }}
-                    style={styles.modalImage}
-                    resizeMode="contain"
+                    source={{ uri: resultImage }}
+                    style={[styles.resultImage]}
+                    resizeMode="contain" 
                   />
                   
-                  <View style={styles.modalPhotoInfo}>
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.8)']}
-                      style={styles.modalInfoGradient}
-                    >
-                      <Text style={styles.modalProductName}>
-                        {selectedPhotoModal.productName}
+                  {/* Interactive Overlay */}
+                  <TouchableOpacity
+                    style={styles.resultImageOverlay}
+                    activeOpacity={1}
+                    onPressIn={showOriginalImage}
+                    onPressOut={hideOriginalImage}
+                  >
+                    {/* Original Image Overlay */}
+                    {showOriginal && (
+                      <Animated.View 
+                        style={[
+                          styles.originalImageOverlay,
+                          { opacity: originalImageOpacity }
+                        ]}
+                      >
+                        <Image
+                          source={{ uri: image }}
+                          style={styles.resultImage}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.originalImageLabel}>
+                          <Text style={styles.originalImageLabelText}>ORİJİNAL</Text>
+                        </View>
+                      </Animated.View>
+                    )}
+                    
+                    {/* Touch Instructions */}
+                    <View style={styles.touchInstructions}>
+                      <Ionicons name="hand-left" size={20} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.touchInstructionsText}>
+                        Basılı tutarak orijinali gör
                       </Text>
-                      <View style={styles.modalMetaInfo}>
-                        <View style={styles.modalDeviceBadge}>
-                          <Ionicons 
-                            name={selectedPhotoModal.device === 'iPhone' ? 'phone-portrait' : 'phone-portrait-outline'} 
-                            size={14} 
-                            color="#FFFFFF" 
+                    </View>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.resultButtonsContainer}>
+                  <TouchableOpacity 
+                    style={[styles.resultButtons, styles.shareButton]}
+                    onPress={() => setShareModalVisible(true)}
+                    disabled={loading}
+                  >
+                    <Ionicons name="share-social" size={20} color={COLORS.text} />
+                    <Text style={styles.buttonText}>
+                      {loading ? "Paylaşılıyor..." : "Paylaş"}
+                    </Text>
+                  </TouchableOpacity>
+                  <Text
+                    style={{
+                      textAlign: "center",
+                      fontSize: 12,
+                      color: COLORS.text,
+                    }}
+                  >
+                    {`Fotoğrafınızı paylaşın ve sizin için özel oluşturulan indirim kodunu kaçırmayın!`}
+                  </Text>
+                  <TouchableOpacity style={styles.resultButtons} onPress={handlePurchase}>
+                    <Text>Hemen Satın Al</Text>
+                  </TouchableOpacity>
+                </View>
+                {/* Benzer Fotoğraflar Bölümü */}
+                <View style={styles.similarPhotosSection}>
+                  <View style={styles.similarPhotosHeader}>
+                    <Text style={styles.similarPhotosTitle}>
+                      {selectedProduct?.name} ile Yapılan Diğer Çalışmalar
+                    </Text>
+                    <Text style={styles.similarPhotosSubtitle}>
+                      Aynı ürünü kullanan diğer kullanıcıların sonuçlarını keşfet
+                    </Text>
+                  </View>
+
+                  {loadingSimilar ? (
+                    <View style={styles.similarPhotosLoading}>
+                      <ActivityIndicator size="large" color={COLORS.active} />
+                      <Text style={styles.loadingText}>Benzer çalışmalar yükleniyor...</Text>
+                    </View>
+                  ) : similarPhotos.length > 0 ? (
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.similarPhotosScrollContent}
+                      style={styles.similarPhotosScroll}
+                    >
+                      {similarPhotos.map((photo, index) => (
+                        <TouchableOpacity
+                          key={photo.id}
+                          style={styles.similarPhotoItem}
+                          onPress={() => openPhotoModal(photo)}
+                          activeOpacity={0.8}
+                        >
+                          <Image
+                            source={{ uri: `${API_URL}${photo.url}` }}
+                            style={styles.similarPhotoImage}
+                            resizeMode="cover"
                           />
-                          <Text style={styles.modalDeviceText}>
-                            {selectedPhotoModal.device}
+                          <LinearGradient
+                            colors={['transparent', 'rgba(0,0,0,0.6)']}
+                            style={styles.similarPhotoGradient}
+                          >
+                            <View style={styles.similarPhotoInfo}>
+                              <View style={styles.deviceBadge}>
+                                <Ionicons 
+                                  name={photo.device === 'iPhone' ? 'phone-portrait' : 'phone-portrait-outline'} 
+                                  size={10} 
+                                  color="#FFFFFF" 
+                                />
+                                <Text style={styles.deviceText}>{photo.device}</Text>
+                              </View>
+                            </View>
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  ) : (
+                    <View style={styles.noSimilarPhotos}>
+                      <Ionicons name="camera-outline" size={48} color={COLORS.text} />
+                      <Text style={styles.noSimilarPhotosTitle}>Henüz paylaşım yok</Text>
+                      <Text style={styles.noSimilarPhotosDesc}>
+                        Bu ürünle yapılan ilk paylaşım olacaksın!
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </ScrollView>
+          )}
+
+          {/* Fotoğraf Büyük Görünüm Modal'ı */}
+          {selectedPhotoModal && (
+            <Modal transparent visible animationType="none">
+              <Animated.View 
+                style={[
+                  styles.photoModal,
+                  { opacity: modalOpacity }
+                ]}
+              >
+                <TouchableOpacity 
+                  style={styles.modalBackdrop}
+                  onPress={closePhotoModal}
+                  activeOpacity={1}
+                >
+                  <View style={styles.modalContent}>
+                    <TouchableOpacity 
+                      style={styles.modalCloseButton}
+                      onPress={closePhotoModal}
+                    >
+                      <Ionicons name="close" size={28} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    
+                    <Image
+                      source={{ uri: `${API_URL}${selectedPhotoModal.url}` }}
+                      style={styles.modalImage}
+                      resizeMode="contain"
+                    />
+                    
+                    <View style={styles.modalPhotoInfo}>
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.8)']}
+                        style={styles.modalInfoGradient}
+                      >
+                        <Text style={styles.modalProductName}>
+                          {selectedPhotoModal.productName}
+                        </Text>
+                        <View style={styles.modalMetaInfo}>
+                          <View style={styles.modalDeviceBadge}>
+                            <Ionicons 
+                              name={selectedPhotoModal.device === 'iPhone' ? 'phone-portrait' : 'phone-portrait-outline'} 
+                              size={14} 
+                              color="#FFFFFF" 
+                            />
+                            <Text style={styles.modalDeviceText}>
+                              {selectedPhotoModal.device}
+                            </Text>
+                          </View>
+                          <Text style={styles.modalDate}>
+                            {new Date(selectedPhotoModal.createdAt).toLocaleDateString('tr-TR', {
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric'
+                            })}
                           </Text>
                         </View>
-                        <Text style={styles.modalDate}>
-                          {new Date(selectedPhotoModal.createdAt).toLocaleDateString('tr-TR', {
-                            day: 'numeric',
-                            month: 'long',
-                            year: 'numeric'
-                          })}
-                        </Text>
-                      </View>
-                    </LinearGradient>
+                      </LinearGradient>
+                    </View>
                   </View>
+                </TouchableOpacity>
+              </Animated.View>
+            </Modal>
+          )}
+          {/* Paylaşım Modalı */}
+          <Modal
+            visible={shareModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShareModalVisible(false)}
+          >
+            <View style={styles.shareModalBackdrop}>
+              <Animated.View style={styles.shareModalContainer}>
+                <Text style={styles.shareModalTitle}>Paylaşım Seçenekleri</Text>
+                <View style={styles.shareOptionsRow}>
+                  <TouchableOpacity style={styles.shareOption} onPress={handleShareApp}>
+                    <Ionicons name="cloud-upload" size={32} color="#4CAF50" />
+                    <Text style={styles.shareOptionText}>Uygulama İçinde</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.shareOption} onPress={handleShareWhatsApp}>
+                    <Ionicons name="logo-whatsapp" size={32} color="#25D366" />
+                    <Text style={styles.shareOptionText}>WhatsApp</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.shareOption} onPress={handleShareInstagram}>
+                    <Ionicons name="logo-instagram" size={32} color="#C13584" />
+                    <Text style={styles.shareOptionText}>Instagram</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.shareOption} onPress={handleShareOther}>
+                    <Ionicons name="share-social" size={32} color="#555" />
+                    <Text style={styles.shareOptionText}>Diğer</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-            </Animated.View>
+                <TouchableOpacity style={styles.shareCancelButton} onPress={() => setShareModalVisible(false)}>
+                  <Text style={styles.shareCancelText}>İptal</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
           </Modal>
-        )}
-      </LinearGradient>
-    </ImageBackground>
+        </LinearGradient>
+      </ImageBackground>
+    </SafeAreaView>
   );
 };
 
@@ -1664,6 +1765,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 10,
   },
+  resultSectionContainer:{
+    flex:1,
+    alignItems:'center',
+    paddingHorizontal:10,
+    paddingVertical:25,
+  },
+  resultImageContainer: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 10,
+  },
   floatingTopNavBack: {
     position: "absolute",
     top: 25,
@@ -1705,6 +1817,8 @@ const styles = StyleSheet.create({
   floatingTopNavText: {
     color: COLORS.text,
     display:'flex',
+    flexDirection:'row',
+    flexWrap:'wrap',
     justifyContent:'center',
     alignItems:'center',
     textAlign:'center',
@@ -1899,13 +2013,12 @@ const styles = StyleSheet.create({
     aspectRatio: 9/16, // Crop edilmiş fotoğrafın exact ratio'su
     borderRadius: 10,
     overflow: 'hidden',
-    maxHeight: 500,
+    contentFit:'contain',
   },
   resultImage: {
     width: "100%",
     aspectRatio: 9/16, // Crop edilmiş fotoğrafın exact ratio'su
     borderRadius: 10,
-    maxHeight: 500,
   },
   resultImageOverlay: {
     position: 'absolute',
@@ -2211,6 +2324,66 @@ const styles = StyleSheet.create({
   },
   productSeparator: {
     width: 15,
+  },
+  shareModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shareModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 28,
+    width: '90%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  shareModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 18,
+    color: COLORS.text,
+  },
+  shareOptionsRow: {
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 18,
+    height:350,
+    gap: 12,
+  },
+  shareOption: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 16,
+    backgroundColor: '#F4EBD0',
+    marginHorizontal: 4,
+  },
+  shareOptionText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  shareCancelButton: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#eee',
+    width: '100%',
+    alignItems: 'center',
+  },
+  shareCancelText: {
+    color: '#C13584',
+    fontWeight: '700',
+    fontSize: 16,
   },
 });
 
