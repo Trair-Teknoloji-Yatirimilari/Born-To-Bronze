@@ -1825,6 +1825,32 @@ const PhotoEditScreen = () => {
           </Modal>
         </LinearGradient>
       </ImageBackground>
+      {eraseMode && (
+        <View style={{
+          position: 'absolute',
+          top: 70,
+          left: 0,
+          right: 0,
+          zIndex: 2000,
+          alignItems: 'center',
+        }}>
+          <View style={{
+            backgroundColor: 'rgba(200,0,0,0.85)',
+            paddingHorizontal: 20,
+            paddingVertical: 8,
+            borderRadius: 20,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.2,
+            shadowRadius: 4,
+            elevation: 4,
+          }}>
+            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16, letterSpacing: 1 }}>
+              Silgi Modu Açık
+            </Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
