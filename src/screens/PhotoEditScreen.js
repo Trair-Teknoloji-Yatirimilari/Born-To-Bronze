@@ -752,17 +752,28 @@ const PhotoEditScreen = () => {
     const ERASE_RADIUS = 20; // Silgi hassasiyeti (piksel cinsinden)
     const ERASE_RADIUS_SQ = ERASE_RADIUS * ERASE_RADIUS;
   
-    // Tüm path'lerdeki, silgiye yakın noktaları sil
-    const newPaths = paths
-      .map((p) => ({
-        ...p,
-        points: p.points.filter((pt) => {
-          const dx = pt.x - x;
-          const dy = pt.y - y;
-          return dx * dx + dy * dy > ERASE_RADIUS_SQ;
-        }),
-      }))
-      .filter((p) => p.points.length > 0);
+    let newPaths = [];
+  
+    paths.forEach((p) => {
+      let currentSegment = [];
+      p.points.forEach((pt) => {
+        const dx = pt.x - x;
+        const dy = pt.y - y;
+        if (dx * dx + dy * dy > ERASE_RADIUS_SQ) {
+          currentSegment.push(pt);
+        } else {
+          // Silgiye temas etti, segmenti kaydet ve yeni segment başlat
+          if (currentSegment.length > 1) {
+            newPaths.push({ ...p, points: currentSegment });
+          }
+          currentSegment = [];
+        }
+      });
+      // Path'in sonu segment olarak kaldıysa ekle
+      if (currentSegment.length > 1) {
+        newPaths.push({ ...p, points: currentSegment });
+      }
+    });
   
     setPaths(newPaths);
   };
