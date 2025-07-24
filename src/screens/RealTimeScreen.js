@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -38,13 +38,12 @@ import { runOnJS } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import ViewShot from "react-native-view-shot";
 import * as FileSystem from "expo-file-system";
-import DeviceInfo from 'react-native-device-info';
-import { PRODUCTS } from "../constants/products";
+import DeviceInfo from "react-native-device-info";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../constants/theme";
 
 // API URL Configuration
-const API_URL = 'https://kafanagoreya.yumru.dev'
+const API_URL = "https://kafanagoreya.yumru.dev";
 
 // __DEV__
 //   ? Platform.select({
@@ -102,7 +101,7 @@ const getDeviceInfo = async () => {
       isTablet,
     };
   } catch (error) {
-    console.error('Device bilgileri alınırken hata:', error);
+    console.error("Device bilgileri alınırken hata:", error);
     return {
       uniqueId: null,
       deviceId: null,
@@ -125,14 +124,14 @@ function RealTimeScreen() {
   const { width, height } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraFacing, setCameraFacing] = useState("front");
-  const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0]);
+
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [filteredPhoto, setFilteredPhoto] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const [hideUIOnPress, setHideUIOnPress] = useState(false);
   const [showHint, setShowHint] = useState(true);
-  
+
   // Paylaşım için yeni state'ler
   const [resultImageId, setResultImageId] = useState(null);
   const [isSharing, setIsSharing] = useState(false);
@@ -144,7 +143,7 @@ function RealTimeScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
-  
+
   // Loading dots animasyonları
   const dot1Anim = useRef(new Animated.Value(0)).current;
   const dot2Anim = useRef(new Animated.Value(0)).current;
@@ -169,6 +168,32 @@ function RealTimeScreen() {
   ]);
   const camera = useRef(null);
   const viewShotRef = useRef(null);
+
+  const [PRODUCTS, setPRODUCTS] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isProductsLoading, setIsProductsLoading] = useState(true); // <-- Loading state
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      console.log("fetchProducts");
+      setIsProductsLoading(true); // <-- Başlangıçta loading
+      try {
+        console.log(`${API_URL}/api/products?product=filter`);
+        const response = await fetch(`${API_URL}/api/products?product=filter`);
+        const data = await response.json();
+        setPRODUCTS(data.products);
+        setSelectedProduct(data.products[1]);
+        console.log(data.products[1])
+        if (data.products.length > 0) {
+          setIsProductsLoading(false);
+        }
+      } catch (e) {
+        console.error("Ürünler yüklenirken hata:", e);
+        setIsProductsLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -250,10 +275,9 @@ function RealTimeScreen() {
           }),
         ]);
 
-        Animated.loop(
-          Animated.sequence([sequence, reset]),
-          { iterations: -1 }
-        ).start();
+        Animated.loop(Animated.sequence([sequence, reset]), {
+          iterations: -1,
+        }).start();
       };
 
       animateDotsSequence();
@@ -274,9 +298,12 @@ function RealTimeScreen() {
     if (faces.length <= 0) return;
   }
 
-  function handleSkiaActions(faces, frame) {
+  const handleSkiaActions = useCallback((faces, frame) => {
     "worklet";
     if (faces.length <= 0) return;
+    
+    // selectedProduct kontrolü ekle
+    if (!selectedProduct || !selectedProduct.filterColor) return;
 
     const { contours } = faces[0];
 
@@ -321,7 +348,7 @@ function RealTimeScreen() {
     });
 
     // Seçili ürünün rengine göre bronzlaştırma filtresi
-    const color = selectedProduct.color;
+    const color = selectedProduct.filterColor;
     const r = parseInt(color.slice(1, 3), 16) / 255;
     const g = parseInt(color.slice(3, 5), 16) / 255;
     const b = parseInt(color.slice(5, 7), 16) / 255;
@@ -352,8 +379,8 @@ function RealTimeScreen() {
     bronzePaint.setColorFilter(bronzeFilter);
     bronzePaint.setBlendMode(BlendMode.Overlay);
 
-    // Kenarları yumuşatmak için blur
-    const blurRadius = 6;
+    // Kenarları yumuşatmak için blur - alın bölgesi için daha yumuşak geçiş
+    const blurRadius = 12;
     const blurFilter = Skia.ImageFilter.MakeBlur(
       blurRadius,
       blurRadius,
@@ -370,7 +397,7 @@ function RealTimeScreen() {
     }
     frame.render(bronzePaint);
     frame.restore();
-  }
+  }, [selectedProduct]);
 
   async function takePhoto() {
     try {
@@ -378,7 +405,6 @@ function RealTimeScreen() {
 
       // SNAPCHAT TARZI: Sadece kamera görüntüsünü capture et (UI elementleri hariç)
       if (viewShotRef.current) {
-
         const uri = await viewShotRef.current.capture({
           format: "jpg",
           quality: 0.9,
@@ -403,7 +429,7 @@ function RealTimeScreen() {
           ...capturedPhoto,
           filterInfo: {
             productName: selectedProduct.name,
-            productColor: selectedProduct.color,
+            productColor: selectedProduct.filterColor,
             filterType: "realtime_capture",
             method: "view_screenshot",
           },
@@ -435,7 +461,7 @@ function RealTimeScreen() {
         isFiltered: true,
         filterInfo: {
           productName: selectedProduct.name,
-          productColor: selectedProduct.color,
+          productColor: selectedProduct.filterColor,
           filterType: "bronze_glow",
           intensity: 0.6,
           appliedAt: new Date().toISOString(),
@@ -449,8 +475,14 @@ function RealTimeScreen() {
 
   async function applyBronzeFilterToImage(photo) {
     try {
+      // selectedProduct kontrolü ekle
+      if (!selectedProduct || !selectedProduct.filterColor) {
+        console.warn("selectedProduct veya filterColor bulunamadı");
+        return photo;
+      }
+      
       // handleSkiaActions'daki aynı bronzlaştırma algoritmasını kullan
-      const color = selectedProduct.color;
+      const color = selectedProduct.filterColor;
       const r = parseInt(color.slice(1, 3), 16) / 255;
       const g = parseInt(color.slice(3, 5), 16) / 255;
       const b = parseInt(color.slice(5, 7), 16) / 255;
@@ -479,7 +511,6 @@ function RealTimeScreen() {
         0,
       ];
 
-
       // Simüle edilmiş processing süresi
       await new Promise((resolve) => setTimeout(resolve, 1200));
 
@@ -498,6 +529,7 @@ function RealTimeScreen() {
         processed: true,
         bronzeSettings: {
           productName: selectedProduct.name,
+          filterColor: selectedProduct.filterColor,
           colorMatrix: colorMatrix,
           intensityR: r * 0.15,
           intensityG: g * 0.08,
@@ -528,15 +560,16 @@ function RealTimeScreen() {
 
       // FormData oluştur
       const formData = new FormData();
-      
+
       // URI format'ını kontrol et ve düzelt
       let imageUri = photoUri;
-      if (!imageUri.startsWith('file://') && !imageUri.startsWith('content://')) {
+      if (
+        !imageUri.startsWith("file://") &&
+        !imageUri.startsWith("content://")
+      ) {
         imageUri = `file://${photoUri}`;
       }
-      
 
-      
       formData.append("image", {
         uri: imageUri,
         name: `realtime-${Date.now()}.jpg`,
@@ -546,7 +579,6 @@ function RealTimeScreen() {
       // Sadece ürün ve device bilgisi gönder - mask gerekmez
       formData.append("selectedProduct", JSON.stringify(selectedProduct));
       formData.append("deviceInfo", JSON.stringify(deviceInfo));
-
 
       const response = await fetch(
         `${API_URL}/api/public/phone/upload-filtered-photo`,
@@ -559,11 +591,10 @@ function RealTimeScreen() {
       const result = await response.json();
 
       if (result.success) {
-
         return {
           imageId: result.imageId,
           imageUrl: result.imageUrl,
-          success: true
+          success: true,
         };
       } else {
         throw new Error(result.error || "Upload başarısız");
@@ -588,12 +619,11 @@ function RealTimeScreen() {
 
       // Eğer henüz backend'e upload edilmemişse, önce upload et
       if (!resultImageId) {
-        
         const uploadResult = await uploadPhotoToBackend(filteredPhoto.path);
-        
+
         if (uploadResult.success) {
           setResultImageId(uploadResult.imageId);
-          
+
           // Upload sonrası paylaşımı yap
           await performShare(uploadResult.imageId);
         } else {
@@ -603,11 +633,10 @@ function RealTimeScreen() {
         // Zaten upload edilmişse, doğrudan paylaş
         await performShare(resultImageId);
       }
-
     } catch (error) {
       console.error("❌ Paylaşım hatası:", error);
       Alert.alert(
-        "Paylaşım Hatası", 
+        "Paylaşım Hatası",
         "Fotoğraf paylaşılırken hata oluştu. Lütfen tekrar deneyin.",
         [{ text: "Tamam", style: "default" }]
       );
@@ -619,7 +648,6 @@ function RealTimeScreen() {
   // Gerçek paylaşım işlemini yapan fonksiyon
   async function performShare(imageId) {
     try {
-
       const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
         method: "POST",
         headers: {
@@ -635,7 +663,7 @@ function RealTimeScreen() {
       if (result.success) {
         // Başarı için haptic feedback
         Vibration.vibrate([100, 50, 100]);
-        
+
         Alert.alert(
           "Paylaşım Başarılı! 🎉",
           "Fotoğrafınız başarıyla paylaşıldı! Şimdi diğer kullanıcılar da bronzlaştırma filtrenizi görebilir.",
@@ -645,8 +673,8 @@ function RealTimeScreen() {
               style: "default",
               onPress: () => {
                 // Başarılı paylaşım sonrası UI feedback
-              }
-            }
+              },
+            },
           ]
         );
       } else {
@@ -685,7 +713,7 @@ function RealTimeScreen() {
     setCapturedPhoto(null);
     setFilteredPhoto(null);
     setShowHint(true); // Yeni fotoğraf için hint'i yeniden göster
-    
+
     // Paylaşım state'lerini temizle
     setResultImageId(null);
     setIsSharing(false);
@@ -712,22 +740,28 @@ function RealTimeScreen() {
   }
 
   const getCurrentProductIndex = () => {
+    if (!selectedProduct || !PRODUCTS.length) return -1;
     return PRODUCTS.findIndex((p) => p.id === selectedProduct.id);
   };
 
   const getPreviousProduct = () => {
+    if (!PRODUCTS.length) return null;
     const currentIndex = getCurrentProductIndex();
     const prevIndex = currentIndex > 0 ? currentIndex - 1 : PRODUCTS.length - 1;
     return PRODUCTS[prevIndex];
   };
 
   const getNextProduct = () => {
+    if (!PRODUCTS.length) return null;
     const currentIndex = getCurrentProductIndex();
     const nextIndex = currentIndex < PRODUCTS.length - 1 ? currentIndex + 1 : 0;
     return PRODUCTS[nextIndex];
   };
 
   const switchToPreviousProduct = () => {
+    const prevProduct = getPreviousProduct();
+    if (!prevProduct) return;
+    
     // Kaydırma animasyonu - sola kaydırma
     Animated.sequence([
       Animated.timing(slideAnim, {
@@ -756,11 +790,14 @@ function RealTimeScreen() {
       }),
     ]).start();
 
-    setSelectedProduct(getPreviousProduct());
+    setSelectedProduct(prevProduct);
     setShowHelp(false);
   };
 
   const switchToNextProduct = () => {
+    const nextProduct = getNextProduct();
+    if (!nextProduct) return;
+    
     // Kaydırma animasyonu - sağa kaydırma
     Animated.sequence([
       Animated.timing(slideAnim, {
@@ -789,7 +826,7 @@ function RealTimeScreen() {
       }),
     ]).start();
 
-    setSelectedProduct(getNextProduct());
+    setSelectedProduct(nextProduct);
     setShowHelp(false);
   };
 
@@ -808,14 +845,31 @@ function RealTimeScreen() {
     }
   });
 
+  if (isProductsLoading || !selectedProduct) {
+    return (
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "#fff",
+          },
+        ]}
+      >
+        <Text style={{ fontSize: 20, color: "#FF6B35", fontWeight: "bold" }}>
+          {isProductsLoading ? "Ürünler yükleniyor..." : "Ürün seçiliyor..."}
+        </Text>
+        {/* Buraya isterseniz animasyonlu loading dots veya spinner ekleyebilirsiniz */}
+      </View>
+    );
+  }
+
   if (capturedPhoto) {
     const displayPhoto = filteredPhoto || capturedPhoto;
 
     return (
-      <TouchableWithoutFeedback
-        onPressIn={hideUI}
-        onPressOut={showUI}
-      >
+      <TouchableWithoutFeedback onPressIn={hideUI} onPressOut={showUI}>
         <View style={StyleSheet.absoluteFill}>
           <StatusBar barStyle="light-content" backgroundColor="black" />
 
@@ -838,16 +892,15 @@ function RealTimeScreen() {
             />
           )}
 
-          <Animated.View 
+          <Animated.View
             style={[
               StyleSheet.absoluteFill,
-              { 
+              {
                 opacity: uiOpacityAnim,
-                pointerEvents: hideUIOnPress ? 'none' : 'auto'
-              }
+                pointerEvents: hideUIOnPress ? "none" : "auto",
+              },
             ]}
-          >
-          </Animated.View>
+          ></Animated.View>
 
           {/* Processing overlay - her zaman görünür olsun */}
           {(isProcessingPhoto || isUploading || isSharing) && (
@@ -856,63 +909,81 @@ function RealTimeScreen() {
                 {isProcessingPhoto && (
                   <>
                     <Ionicons name="camera" size={32} color={COLORS.text} />
-                    <Text style={styles.processingText}>📸 Fotoğraf çekiliyor...</Text>
-                    <Text style={styles.processingSubText}>Lütfen bekleyin</Text>
+                    <Text style={styles.processingText}>
+                      📸 Fotoğraf çekiliyor...
+                    </Text>
+                    <Text style={styles.processingSubText}>
+                      Lütfen bekleyin
+                    </Text>
                   </>
                 )}
                 {isUploading && (
                   <>
                     <Ionicons name="cloud-upload" size={32} color="#4285F4" />
-                    <Text style={styles.processingText}>📤 Fotoğraf yükleniyor...</Text>
-                    <Text style={styles.processingSubText}>Backend'e gönderiliyor</Text>
+                    <Text style={styles.processingText}>
+                      📤 Fotoğraf yükleniyor...
+                    </Text>
+                    <Text style={styles.processingSubText}>
+                      Backend'e gönderiliyor
+                    </Text>
                   </>
                 )}
                 {isSharing && !isUploading && (
                   <>
                     <Ionicons name="share-social" size={32} color="#FF6B35" />
-                    <Text style={styles.processingText}>🚀 Paylaşılıyor...</Text>
-                    <Text style={styles.processingSubText}>Toplulukla paylaşılıyor</Text>
+                    <Text style={styles.processingText}>
+                      🚀 Paylaşılıyor...
+                    </Text>
+                    <Text style={styles.processingSubText}>
+                      Toplulukla paylaşılıyor
+                    </Text>
                   </>
                 )}
                 <View style={styles.loadingDots}>
-                  <Animated.View 
+                  <Animated.View
                     style={[
-                      styles.dot, 
-                      { 
-                        transform: [{ 
-                          scale: dot1Anim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.5, 1.2]
-                          })
-                        }] 
-                      }
-                    ]} 
+                      styles.dot,
+                      {
+                        transform: [
+                          {
+                            scale: dot1Anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.5, 1.2],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
                   />
-                  <Animated.View 
+                  <Animated.View
                     style={[
-                      styles.dot, 
-                      { 
-                        transform: [{ 
-                          scale: dot2Anim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.5, 1.2]
-                          })
-                        }] 
-                      }
-                    ]} 
+                      styles.dot,
+                      {
+                        transform: [
+                          {
+                            scale: dot2Anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.5, 1.2],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
                   />
-                  <Animated.View 
+                  <Animated.View
                     style={[
-                      styles.dot, 
-                      { 
-                        transform: [{ 
-                          scale: dot3Anim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.5, 1.2]
-                          })
-                        }] 
-                      }
-                    ]} 
+                      styles.dot,
+                      {
+                        transform: [
+                          {
+                            scale: dot3Anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.5, 1.2],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
                   />
                 </View>
               </View>
@@ -920,20 +991,20 @@ function RealTimeScreen() {
           )}
 
           {/* Animasyonlu UI Container */}
-          <Animated.View 
+          <Animated.View
             style={[
               StyleSheet.absoluteFill,
-              { 
+              {
                 opacity: uiOpacityAnim,
-                pointerEvents: hideUIOnPress ? 'none' : 'auto'
-              }
+                pointerEvents: hideUIOnPress ? "none" : "auto",
+              },
             ]}
           >
             {/* Product info header */}
             <View style={styles.previewHeader}>
               <View style={styles.productBadge}>
                 <Image
-                  source={selectedProduct.pngImage}
+                  source={{uri: `${API_URL}${selectedProduct.imageUrl}`}}
                   style={styles.productBadgeImage}
                 />
                 <View style={styles.productBadgeContent}>
@@ -950,38 +1021,41 @@ function RealTimeScreen() {
             </View>
 
             {/* Filter status indicator */}
-            {filteredPhoto && filteredPhoto.captureMethod === "clean_camera" && (
-              <View style={styles.filterStatusBadge}>
-                <Ionicons name="camera" size={16} color="#4CAF50" />
-                <Text style={styles.filterStatusText}>Temiz Kamera Capture ✨</Text>
-              </View>
-            )}
+            {filteredPhoto &&
+              filteredPhoto.captureMethod === "clean_camera" && (
+                <View style={styles.filterStatusBadge}>
+                  <Ionicons name="camera" size={16} color="#4CAF50" />
+                  <Text style={styles.filterStatusText}>
+                    Temiz Kamera Capture ✨
+                  </Text>
+                </View>
+              )}
 
             {/* Action buttons */}
             <View style={styles.previewActions}>
-                          <TouchableOpacity
-              style={[
-                styles.actionButton, 
-                styles.shareButton,
-                (isSharing || isUploading) && styles.actionButtonDisabled
-              ]}
-              onPress={sharePhoto}
-              disabled={isProcessingPhoto || isSharing || isUploading}
-            >
-              {isSharing || isUploading ? (
-                <>
-                  <Ionicons name="cloud-upload" size={20} color="#fff" />
-                  <Text style={styles.actionButtonText}>
-                    {isUploading ? "Yükleniyor..." : "Paylaşılıyor..."}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="share-social" size={20} color="#fff" />
-                  <Text style={styles.actionButtonText}>Paylaş</Text>
-                </>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.shareButton,
+                  (isSharing || isUploading) && styles.actionButtonDisabled,
+                ]}
+                onPress={sharePhoto}
+                disabled={isProcessingPhoto || isSharing || isUploading}
+              >
+                {isSharing || isUploading ? (
+                  <>
+                    <Ionicons name="cloud-upload" size={20} color="#fff" />
+                    <Text style={styles.actionButtonText}>
+                      {isUploading ? "Yükleniyor..." : "Paylaşılıyor..."}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="share-social" size={20} color="#fff" />
+                    <Text style={styles.actionButtonText}>Paylaş</Text>
+                  </>
+                )}
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.actionButton, styles.buyButton]}
@@ -1005,15 +1079,10 @@ function RealTimeScreen() {
 
           {/* Basılı tutma ipucu */}
           {!hideUIOnPress && showHint && (
-            <Animated.View 
-              style={[
-                styles.holdToHideHint,
-                { opacity: uiOpacityAnim }
-              ]}
+            <Animated.View
+              style={[styles.holdToHideHint, { opacity: uiOpacityAnim }]}
             >
-              <Text style={styles.holdToHideText}>
-                👆 Basılı tut: UI gizle
-              </Text>
+              <Text style={styles.holdToHideText}>👆 Basılı tut: UI gizle</Text>
             </Animated.View>
           )}
         </View>
@@ -1083,7 +1152,7 @@ function RealTimeScreen() {
         />
         <View style={styles.productHeader}>
           <Image
-            source={selectedProduct.pngImage}
+            source={{uri: `${API_URL}${selectedProduct.imageUrl}`}}
             style={styles.topProductImage}
           />
           <View style={styles.productInfo}>
@@ -1109,7 +1178,7 @@ function RealTimeScreen() {
         >
           <View style={styles.productInfoHeader}>
             <Image
-              source={selectedProduct.pngImage}
+              source={{uri: `${API_URL}${selectedProduct.imageUrl}`}}
               style={styles.productInfoImage}
             />
             <View style={styles.productInfoContent}>
@@ -1190,13 +1259,17 @@ function RealTimeScreen() {
                 { transform: [{ scale: scaleAnim }] },
               ]}
             >
-              <Image
-                source={getPreviousProduct().pngImage}
-                style={styles.sideProductImage}
-              />
-              <Text style={styles.sideProductName}>
-                {getPreviousProduct().name}
-              </Text>
+              {getPreviousProduct() && (
+                <>
+                  <Image
+                    source={{uri: `${API_URL}${getPreviousProduct().imageUrl}`}}
+                    style={styles.sideProductImage}
+                  />
+                  <Text style={styles.sideProductName}>
+                    {getPreviousProduct().name}
+                  </Text>
+                </>
+              )}
             </Animated.View>
           </TouchableOpacity>
 
@@ -1229,7 +1302,7 @@ function RealTimeScreen() {
                 </View>
               ) : (
                 <Image
-                  source={selectedProduct.pngImage}
+                  source={{uri: `${API_URL}${selectedProduct.imageUrl}`}}
                   style={styles.mainCaptureButtonImage}
                 />
               )}
@@ -1252,13 +1325,17 @@ function RealTimeScreen() {
                 { transform: [{ scale: scaleAnim }] },
               ]}
             >
-              <Image
-                source={getNextProduct().pngImage}
-                style={styles.sideProductImage}
-              />
-              <Text style={styles.sideProductName}>
-                {getNextProduct().name}
-              </Text>
+              {getNextProduct() && (
+                <>
+                  <Image
+                    source={{uri: `${API_URL}${getNextProduct().imageUrl}`}}
+                    style={styles.sideProductImage}
+                  />
+                  <Text style={styles.sideProductName}>
+                    {getNextProduct().name}
+                  </Text>
+                </>
+              )}
             </Animated.View>
           </TouchableOpacity>
         </Animated.View>
