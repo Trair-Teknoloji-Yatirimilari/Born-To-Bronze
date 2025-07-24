@@ -749,17 +749,21 @@ const PhotoEditScreen = () => {
   // Silgi fonksiyonunu güncelliyorum
   const handleErase = (x, y) => {
     if (!eraseMode) return;
-    // Dairesel alanı sil
+    const ERASE_RADIUS = 20; // Silgi hassasiyeti (piksel cinsinden)
+    const ERASE_RADIUS_SQ = ERASE_RADIUS * ERASE_RADIUS;
+  
+    // Tüm path'lerdeki, silgiye yakın noktaları sil
     const newPaths = paths
-      .map((p) => {
-        const filtered = p.points.filter((point) => {
-          const dx = point.x - x;
-          const dy = point.y - y;
-          return dx * dx + dy * dy >= brushSize * brushSize;
-        });
-        return { ...p, points: filtered };
-      })
+      .map((p) => ({
+        ...p,
+        points: p.points.filter((pt) => {
+          const dx = pt.x - x;
+          const dy = pt.y - y;
+          return dx * dx + dy * dy > ERASE_RADIUS_SQ;
+        }),
+      }))
       .filter((p) => p.points.length > 0);
+  
     setPaths(newPaths);
   };
 
