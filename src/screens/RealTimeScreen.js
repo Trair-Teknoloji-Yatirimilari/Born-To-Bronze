@@ -13,6 +13,8 @@ import {
   Alert,
   Platform,
   Vibration,
+  ActivityIndicator,
+  Modal,
 } from "react-native";
 import {
   DrawableFrame,
@@ -41,6 +43,7 @@ import * as FileSystem from "expo-file-system";
 import DeviceInfo from "react-native-device-info";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../constants/theme";
+import Share from "react-native-share";
 
 // API URL Configuration
 const API_URL = "https://kafanagoreya.yumru.dev";
@@ -136,6 +139,8 @@ function RealTimeScreen() {
   const [resultImageId, setResultImageId] = useState(null);
   const [isSharing, setIsSharing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false); // Fotoğraf yükleniyor mu?
 
   // Animasyonlar
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -648,6 +653,7 @@ function RealTimeScreen() {
   // Gerçek paylaşım işlemini yapan fonksiyon
   async function performShare(imageId) {
     try {
+      const deviceInfo = await getDeviceInfo();
       const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
         method: "POST",
         headers: {
@@ -655,6 +661,7 @@ function RealTimeScreen() {
         },
         body: JSON.stringify({
           imageId: imageId,
+          uniqueId: deviceInfo.uniqueId,
         }),
       });
 
@@ -845,6 +852,89 @@ function RealTimeScreen() {
     }
   });
 
+  // Paylaşım fonksiyonları
+  const handleShareApp = async () => {
+    setShareModalVisible(false);
+    await sharePhoto();
+  };
+  const handleShareWhatsApp = async () => {
+    setShareModalVisible(false);
+    if (!filteredPhoto || !filteredPhoto.path) {
+      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      return;
+    }
+    try {
+      let shareUrl = filteredPhoto.path;
+      if (/^https?:\/\//.test(filteredPhoto.path)) {
+        const fileName = `shared-photo-${Date.now()}.jpg`;
+        const fileUri = FileSystem.cacheDirectory + fileName;
+        const downloadRes = await FileSystem.downloadAsync(filteredPhoto.path, fileUri);
+        shareUrl = downloadRes.uri;
+      }
+      await Share.open({
+        url: shareUrl,
+        social: Share.Social.WHATSAPP,
+        failOnCancel: false,
+      });
+    } catch (e) {}
+  };
+  const handleShareInstagram = async () => {
+    setShareModalVisible(false);
+    if (!filteredPhoto || !filteredPhoto.path) {
+      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      return;
+    }
+    try {
+      let shareUrl = filteredPhoto.path;
+      if (/^https?:\/\//.test(filteredPhoto.path)) {
+        const fileName = `shared-photo-${Date.now()}.jpg`;
+        const fileUri = FileSystem.cacheDirectory + fileName;
+        const downloadRes = await FileSystem.downloadAsync(filteredPhoto.path, fileUri);
+        shareUrl = downloadRes.uri;
+      }
+      await Share.open({
+        url: shareUrl,
+        social: Share.Social.INSTAGRAM,
+        failOnCancel: false,
+      });
+    } catch (e) {}
+  };
+  const handleShareOther = async () => {
+    setShareModalVisible(false);
+    if (!filteredPhoto || !filteredPhoto.path) {
+      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      return;
+    }
+    try {
+      let shareUrl = filteredPhoto.path;
+      if (/^https?:\/\//.test(filteredPhoto.path)) {
+        const fileName = `shared-photo-${Date.now()}.jpg`;
+        const fileUri = FileSystem.cacheDirectory + fileName;
+        const downloadRes = await FileSystem.downloadAsync(filteredPhoto.path, fileUri);
+        shareUrl = downloadRes.uri;
+      }
+      // file:// ile başlamıyorsa ekle
+      if (!shareUrl.startsWith("file://")) {
+        shareUrl = "file://" + shareUrl;
+      }
+      // Dosya gerçekten var mı kontrol et
+      const fileInfo = await FileSystem.getInfoAsync(shareUrl);
+      if (!fileInfo.exists) {
+        Alert.alert("Hata", "Paylaşılacak dosya bulunamadı veya erişilemiyor!");
+        return;
+      }
+      await Share.open({
+        url: shareUrl,
+        type: "image/jpeg",
+        title: "Bronzlaştırılmış Fotoğrafını Paylaş",
+        message: "Bronzlaştırıcı krem ile oluşturduğum fotoğrafı paylaşıyorum!",
+        failOnCancel: false,
+      });
+    } catch (e) {
+      Alert.alert("Paylaşım Hatası", "Paylaşım ekranı açılamadı veya bir hata oluştu.");
+    }
+  };
+
   if (isProductsLoading || !selectedProduct) {
     return (
       <View
@@ -877,7 +967,15 @@ function RealTimeScreen() {
           <Image
             source={{ uri: `file://${displayPhoto.path}` }}
             style={StyleSheet.absoluteFill}
+            onLoadStart={() => setImageLoading(true)}
+            onLoadEnd={() => setImageLoading(false)}
           />
+          {imageLoading && (
+            <View style={styles.processingOverlay}>
+              <ActivityIndicator size="large" color={COLORS.text} />
+              <Text style={styles.processingText}>Fotoğraf yükleniyor...</Text>
+            </View>
+          )}
 
           {/* ✅ Minimal overlay sadece görsel zenginlik için */}
           {filteredPhoto && filteredPhoto.captureMethod === "clean_camera" && (
@@ -1039,22 +1137,11 @@ function RealTimeScreen() {
                   styles.shareButton,
                   (isSharing || isUploading) && styles.actionButtonDisabled,
                 ]}
-                onPress={sharePhoto}
+                onPress={() => setShareModalVisible(true)}
                 disabled={isProcessingPhoto || isSharing || isUploading}
               >
-                {isSharing || isUploading ? (
-                  <>
-                    <Ionicons name="cloud-upload" size={20} color="#fff" />
-                    <Text style={styles.actionButtonText}>
-                      {isUploading ? "Yükleniyor..." : "Paylaşılıyor..."}
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="share-social" size={20} color="#fff" />
-                    <Text style={styles.actionButtonText}>Paylaş</Text>
-                  </>
-                )}
+                <Ionicons name="share-social" size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>Paylaş</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1085,6 +1172,60 @@ function RealTimeScreen() {
               <Text style={styles.holdToHideText}>👆 Basılı tut: UI gizle</Text>
             </Animated.View>
           )}
+
+          {/* Paylaşım Modalı */}
+          <Modal
+            visible={shareModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShareModalVisible(false)}
+          >
+            <View style={styles.shareModalBackdrop}>
+              <Animated.View style={styles.shareModalContainer}>
+                <Text style={styles.shareModalTitle}>Paylaşım Seçenekleri</Text>
+                <View style={styles.shareOptionsRow}>
+                  <TouchableOpacity
+                    style={styles.shareOption}
+                    onPress={handleShareApp}
+                  >
+                    <Ionicons name="cloud-upload" size={32} color="#4CAF50" />
+                    <Text style={styles.shareOptionText}>Uygulama İçinde</Text>
+                  </TouchableOpacity>
+                  {Platform.OS === "android" && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.shareOption}
+                        onPress={handleShareWhatsApp}
+                      >
+                        <Ionicons name="logo-whatsapp" size={32} color="#25D366" />
+                        <Text style={styles.shareOptionText}>WhatsApp</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.shareOption}
+                        onPress={handleShareInstagram}
+                      >
+                        <Ionicons name="logo-instagram" size={32} color="#C13584" />
+                        <Text style={styles.shareOptionText}>Instagram</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  <TouchableOpacity
+                    style={styles.shareOption}
+                    onPress={handleShareOther}
+                  >
+                    <Ionicons name="share-social" size={32} color="#555" />
+                    <Text style={styles.shareOptionText}>Diğer</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={styles.shareCancelButton}
+                  onPress={() => setShareModalVisible(false)}
+                >
+                  <Text style={styles.shareCancelText}>İptal</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
+          </Modal>
         </View>
       </TouchableWithoutFeedback>
     );
@@ -1898,6 +2039,62 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     textAlign: "center",
     overflow: "hidden",
+  },
+
+  // Share Modal Styles
+  shareModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  shareModalContainer: {
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    padding: 20,
+    width: "80%",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 15,
+  },
+  shareModalTitle: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 20,
+  },
+  shareOptionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
+    marginBottom: 20,
+  },
+  shareOption: {
+    alignItems: "center",
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    width: "30%",
+    backgroundColor: "rgba(0,0,0,0.05)",
+  },
+  shareOptionText: {
+    color: COLORS.text,
+    fontSize: 12,
+    marginTop: 8,
+  },
+  shareCancelButton: {
+    backgroundColor: "#FF6B35",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 20,
+  },
+  shareCancelText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 
