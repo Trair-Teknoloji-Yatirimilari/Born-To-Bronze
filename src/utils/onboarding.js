@@ -23,9 +23,9 @@ export const ONBOARDING_STEPS = {
 export const isOnboardingCompleted = async () => {
   try {
     //TODO: Testten çıkınca burası true olacak
-    // const completed = await AsyncStorage.getItem(ONBOARDING_KEYS.COMPLETED);
-    // return completed === 'true';
-    return false;
+    const completed = await AsyncStorage.getItem(ONBOARDING_KEYS.COMPLETED);
+    return completed === 'true';
+    // return false;
   } catch (error) {
     console.error('Error checking onboarding status:', error);
     return false;

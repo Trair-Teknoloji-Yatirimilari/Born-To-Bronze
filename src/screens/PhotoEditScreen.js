@@ -324,6 +324,7 @@ const PhotoEditScreen = () => {
   const modalOpacity = useRef(new Animated.Value(0)).current;
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [PRODUCTS, setPRODUCTS] = useState([]);
+  const [imageLoading, setImageLoading] = useState(false); // Fotoğraf yükleniyor mu?
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -1069,8 +1070,16 @@ const PhotoEditScreen = () => {
       return;
     }
     try {
+      let shareUrl = resultImage;
+      // Eğer http(s) ile başlıyorsa önce indir
+      if (/^https?:\/\//.test(resultImage)) {
+        const fileName = `shared-photo-${Date.now()}.jpg`;
+        const fileUri = FileSystem.cacheDirectory + fileName;
+        const downloadRes = await FileSystem.downloadAsync(resultImage, fileUri);
+        shareUrl = downloadRes.uri;
+      }
       await Share.open({
-        url: resultImage,
+        url: shareUrl,
         social: Share.Social.WHATSAPP,
         failOnCancel: false,
       });
@@ -1083,8 +1092,15 @@ const PhotoEditScreen = () => {
       return;
     }
     try {
+      let shareUrl = resultImage;
+      if (/^https?:\/\//.test(resultImage)) {
+        const fileName = `shared-photo-${Date.now()}.jpg`;
+        const fileUri = FileSystem.cacheDirectory + fileName;
+        const downloadRes = await FileSystem.downloadAsync(resultImage, fileUri);
+        shareUrl = downloadRes.uri;
+      }
       await Share.open({
-        url: resultImage,
+        url: shareUrl,
         social: Share.Social.INSTAGRAM,
         failOnCancel: false,
       });
@@ -1097,8 +1113,15 @@ const PhotoEditScreen = () => {
       return;
     }
     try {
+      let shareUrl = resultImage;
+      if (/^https?:\/\//.test(resultImage)) {
+        const fileName = `shared-photo-${Date.now()}.jpg`;
+        const fileUri = FileSystem.cacheDirectory + fileName;
+        const downloadRes = await FileSystem.downloadAsync(resultImage, fileUri);
+        shareUrl = downloadRes.uri;
+      }
       await Share.open({
-        url: resultImage,
+        url: shareUrl,
         failOnCancel: false,
       });
     } catch (e) {}
@@ -1553,8 +1576,15 @@ const PhotoEditScreen = () => {
                     source={{ uri: resultImage }}
                     style={[styles.resultImage]}
                     resizeMode="contain"
+                    onLoadStart={() => setImageLoading(true)}
+                    onLoadEnd={() => setImageLoading(false)}
                   />
-
+                  {imageLoading && (
+                    <View style={styles.loadingOverlay}>
+                      <ActivityIndicator size="large" color={COLORS.text} />
+                      <Text style={styles.loadingText}>Fotoğraf yükleniyor...</Text>
+                    </View>
+                  )}
                   {/* Interactive Overlay */}
                   <TouchableOpacity
                     style={styles.resultImageOverlay}
@@ -1792,20 +1822,24 @@ const PhotoEditScreen = () => {
                     <Ionicons name="cloud-upload" size={32} color="#4CAF50" />
                     <Text style={styles.shareOptionText}>Uygulama İçinde</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.shareOption}
-                    onPress={handleShareWhatsApp}
-                  >
-                    <Ionicons name="logo-whatsapp" size={32} color="#25D366" />
-                    <Text style={styles.shareOptionText}>WhatsApp</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.shareOption}
-                    onPress={handleShareInstagram}
-                  >
-                    <Ionicons name="logo-instagram" size={32} color="#C13584" />
-                    <Text style={styles.shareOptionText}>Instagram</Text>
-                  </TouchableOpacity>
+                  {Platform.OS === "android" && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.shareOption}
+                        onPress={handleShareWhatsApp}
+                      >
+                        <Ionicons name="logo-whatsapp" size={32} color="#25D366" />
+                        <Text style={styles.shareOptionText}>WhatsApp</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.shareOption}
+                        onPress={handleShareInstagram}
+                      >
+                        <Ionicons name="logo-instagram" size={32} color="#C13584" />
+                        <Text style={styles.shareOptionText}>Instagram</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
                   <TouchableOpacity
                     style={styles.shareOption}
                     onPress={handleShareOther}
@@ -2495,14 +2529,14 @@ const styles = StyleSheet.create({
   },
   shareOptionsRow: {
     flexDirection: "column",
-    justifyContent: "space-between",
+    justifyContent: "center",
     width: "100%",
     marginBottom: 18,
     height: 350,
     gap: 12,
   },
   shareOption: {
-    flex: 1,
+    
     alignItems: "center",
     padding: 10,
     borderRadius: 16,
