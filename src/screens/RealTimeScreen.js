@@ -159,12 +159,9 @@ function RealTimeScreen() {
   const isCameraActive = isFocused && appState === "active";
   const cameraDevice = useCameraDevice(cameraFacing);
   const format = useCameraFormat(cameraDevice, [
-    {
-      videoResolution: Dimensions.get("window"),
-    },
-    {
-      fps: 60,
-    },
+   // { videoAspectRatio: 16 / 9 }, //TODO: Performans sorunu olursa kapat
+    { videoResolution: Dimensions.get("window") },
+    { fps: 30 },
   ]);
   const camera = useRef(null);
   const viewShotRef = useRef(null);
@@ -175,15 +172,12 @@ function RealTimeScreen() {
 
   useEffect(() => {
     const fetchProducts = async () => {
-      console.log("fetchProducts");
       setIsProductsLoading(true); // <-- Başlangıçta loading
       try {
-        console.log(`${API_URL}/api/products?product=filter`);
         const response = await fetch(`${API_URL}/api/products?product=filter`);
         const data = await response.json();
         setPRODUCTS(data.products);
         setSelectedProduct(data.products[1]);
-        console.log(data.products[1]);
         if (data.products.length > 0) {
           setIsProductsLoading(false);
         }
@@ -223,7 +217,6 @@ function RealTimeScreen() {
   // useEffect(() => {
   //   if (showHelp) {
   //     const timer = setTimeout(() => setShowHelp(false), 3000);
-  //     console.log("showHelp", showHelp);
   //     return () => clearTimeout(timer);
   //   }
   // }, [showHelp]);
@@ -232,7 +225,6 @@ function RealTimeScreen() {
   useEffect(() => {
     if (capturedPhoto && showHint) {
       const timer = setTimeout(() => setShowHint(false), 4000);
-      console.log("showHint", showHint);
       return () => clearTimeout(timer);
     }
   }, [capturedPhoto, showHint]);
@@ -290,7 +282,7 @@ function RealTimeScreen() {
     }
   }, [isProcessingPhoto, isUploading, isSharing]);
 
-  function handleUiRotation(rotation) { }
+  function handleUiRotation(rotation) {}
 
   function handleCameraMountError(error) {
     console.error("camera mount error", error);
@@ -351,10 +343,7 @@ function RealTimeScreen() {
     const paint = Skia.Paint();
     paint.setColorFilter(Skia.ColorFilter.MakeMatrix(colorMatrix));
     paint.setBlendMode(BlendMode.SoftLight);
-    paint.setImageFilter(
-      Skia.ImageFilter.MakeBlur(2, 2, TileMode.Clamp, null)
-    );
-
+    paint.setImageFilter(Skia.ImageFilter.MakeBlur(2, 2, TileMode.Clamp, null));
 
     return paint;
   }, [selectedProduct?.filterColor]);
@@ -415,15 +404,15 @@ function RealTimeScreen() {
       const { width: fw, height: fh, x, y } = facePath.getBounds();
       const centerX = x + fw / 2;
       const centerY = y + fh / 2;
-    
+
       const gradient = Skia.Shader.MakeRadialGradient(
         { x: centerX, y: centerY },
         Math.max(fw, fh) / 2,
-        [Skia.Color(0x00000000), Skia.Color(0x00000000), Skia.Color(0x99000000)],
+        [Skia.Color(0x00000000), Skia.Color(0x00000000), Skia.Color("#000000")],
         [0, 0.5, 1],
         TileMode.Clamp
       );
-    
+
       const featherPaint = Skia.Paint();
       featherPaint.setShader(gradient);
       featherPaint.setAlphaf(0.9);
@@ -575,7 +564,7 @@ function RealTimeScreen() {
           intensityR: r * 0.15,
           intensityG: g * 0.08,
           intensityB: b * 0.03,
-          blendMode: "overlay",
+          blendMode: "soft_light",
           alpha: 0.6,
         },
       };
@@ -915,7 +904,7 @@ function RealTimeScreen() {
         social: Share.Social.WHATSAPP,
         failOnCancel: false,
       });
-    } catch (e) { }
+    } catch (e) {}
   };
   const handleShareInstagram = async () => {
     setShareModalVisible(false);
@@ -939,7 +928,7 @@ function RealTimeScreen() {
         social: Share.Social.INSTAGRAM,
         failOnCancel: false,
       });
-    } catch (e) { }
+    } catch (e) {}
   };
   const handleShareOther = async () => {
     setShareModalVisible(false);
@@ -1312,7 +1301,6 @@ function RealTimeScreen() {
               onError={handleCameraMountError}
               faceDetectionCallback={handleFacesDetected}
               onUIRotationChanged={handleUiRotation}
-              // skiaActions={handleSkiaActions}
               frameProcessor={frameProcessor}
               faceDetectionOptions={faceDetectionOptions}
               format={format}
