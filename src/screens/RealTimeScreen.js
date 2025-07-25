@@ -225,17 +225,19 @@ function RealTimeScreen() {
   }, []);
 
   // Yardım ipucunu otomatik gizle
-  useEffect(() => {
-    if (showHelp) {
-      const timer = setTimeout(() => setShowHelp(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [showHelp]);
+  // useEffect(() => {
+  //   if (showHelp) {
+  //     const timer = setTimeout(() => setShowHelp(false), 3000);
+  //     console.log("showHelp", showHelp);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [showHelp]);
 
   // Preview ekranında hint'i otomatik gizle
   useEffect(() => {
     if (capturedPhoto && showHint) {
       const timer = setTimeout(() => setShowHint(false), 4000);
+      console.log("showHint", showHint);
       return () => clearTimeout(timer);
     }
   }, [capturedPhoto, showHint]);
@@ -1388,19 +1390,14 @@ function RealTimeScreen() {
             {selectedProduct.description}
           </Text>
 
-          <View style={styles.productInfoFeatures}>
-            <View style={styles.featureItem}>
-              <Ionicons name="color-palette" size={16} color={COLORS.text} />
-              <Text style={styles.featureText}>Bronzlaştırma Filtresi</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="water" size={16} color={COLORS.text} />
-              <Text style={styles.featureText}>200ml Premium Formül</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="shield-checkmark" size={16} color={COLORS.text} />
-              <Text style={styles.featureText}>Cilt Dostu İçerik</Text>
-            </View>
+
+          <View style={styles.productInfoActions}>
+            <TouchableOpacity
+              style={styles.infoActionButton}
+              onPress={() => Linking.openURL(selectedProduct.link)}
+            >
+              <Text style={styles.infoActionText}>Sitede Keşfet</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.productInfoActions}>
@@ -1692,6 +1689,7 @@ const styles = StyleSheet.create({
   },
   productInfoActions: {
     alignItems: "center",
+    marginBottom: 10,
   },
   infoActionButton: {
     backgroundColor: "#FF6B35",
