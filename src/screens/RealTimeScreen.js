@@ -188,7 +188,7 @@ function RealTimeScreen() {
         const data = await response.json();
         setPRODUCTS(data.products);
         setSelectedProduct(data.products[1]);
-        console.log(data.products[1])
+        console.log(data.products[1]);
         if (data.products.length > 0) {
           setIsProductsLoading(false);
         }
@@ -303,106 +303,132 @@ function RealTimeScreen() {
     if (faces.length <= 0) return;
   }
 
-  const handleSkiaActions = useCallback((faces, frame) => {
-    "worklet";
-    if (faces.length <= 0) return;
-    
-    // selectedProduct kontrolü ekle
-    if (!selectedProduct || !selectedProduct.filterColor) return;
+  const handleSkiaActions = useCallback(
+    (faces, frame) => {
+      "worklet";
+      if (faces.length <= 0) return;
 
-    const { contours } = faces[0];
+      // selectedProduct kontrolü ekle
+      if (!selectedProduct || !selectedProduct.filterColor) return;
 
-    // Yüz konturu oluştur
-    const facePath = Skia.Path.Make();
-    const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
-    necessaryContours.forEach((key) => {
-      if (contours?.[key]) {
-        contours[key].forEach((point, index) => {
-          if (index === 0) {
-            facePath.moveTo(point.x, point.y);
-          } else {
-            facePath.lineTo(point.x, point.y);
-          }
-        });
-        facePath.close();
+      const { contours } = faces[0];
+
+      // Yüz konturu oluştur
+      const facePath = Skia.Path.Make();
+      const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
+
+      const allPoints = necessaryContours.flatMap(
+        (key) => contours?.[key] || []
+      );
+      const maxX = Math.max(...allPoints.map(p => p.x));
+      
+      const scaleX = 1.1; // Yalnızca sağa doğru %20 genişlet
+      
+      necessaryContours.forEach((key) => {
+        if (contours?.[key]) {
+          contours[key].forEach((point, index) => {
+            // Sadece sağa doğru genişlet
+            const newX = maxX + (point.x - maxX) * scaleX;
+            if (index === 0) {
+              facePath.moveTo(newX, point.y);
+            } else {
+              facePath.lineTo(newX, point.y);
+            }
+          });
+          facePath.close();
+        }
+      });
+
+      necessaryContours.forEach((key) => {
+        if (contours?.[key]) {
+          contours[key].forEach((point, index) => {
+            if (index === 0) {
+              facePath.moveTo(point.x, point.y);
+            } else {
+              facePath.lineTo(point.x, point.y);
+            }
+          });
+          facePath.close();
+        }
+      });
+
+      // Gözler ve dudaklar için hariç tutma bölgeleri
+      const excludePath = Skia.Path.Make();
+      const excludeContours = [
+        "LEFT_EYE",
+        "RIGHT_EYE",
+        "UPPER_LIP_TOP",
+        "UPPER_LIP_BOTTOM",
+        "LOWER_LIP_TOP",
+        "LOWER_LIP_BOTTOM",
+      ];
+      excludeContours.forEach((key) => {
+        if (contours?.[key]) {
+          contours[key].forEach((point, index) => {
+            if (index === 0) {
+              excludePath.moveTo(point.x, point.y);
+            } else {
+              excludePath.lineTo(point.x, point.y);
+            }
+          });
+          excludePath.close();
+        } else {
+        }
+      });
+
+      // Seçili ürünün rengine göre bronzlaştırma filtresi
+      const color = selectedProduct.filterColor;
+      const r = parseInt(color.slice(1, 3), 16) / 255;
+      const g = parseInt(color.slice(3, 5), 16) / 255;
+      const b = parseInt(color.slice(5, 7), 16) / 255;
+      const colorMatrix = [
+        1,
+        0,
+        0,
+        0,
+        r * 0.15,
+        0,
+        1,
+        0,
+        0,
+        g * 0.08,
+        0,
+        0,
+        1,
+        0,
+        b * 0.03,
+        0,
+        0,
+        0,
+        0.6,
+        0,
+      ];
+      const bronzeFilter = Skia.ColorFilter.MakeMatrix(colorMatrix);
+      const bronzePaint = Skia.Paint();
+      bronzePaint.setColorFilter(bronzeFilter);
+      bronzePaint.setBlendMode(BlendMode.Overlay);
+
+      // Kenarları yumuşatmak için blur - alın bölgesi için daha yumuşak geçiş
+      const blurRadius = 10;
+      const blurFilter = Skia.ImageFilter.MakeBlur(
+        blurRadius,
+        blurRadius,
+        TileMode.Clamp,
+        null
+      );
+      bronzePaint.setImageFilter(blurFilter);
+
+      // Yüz bölgesine filtre uygula, gözler ve dudakları hariç tut
+      frame.save();
+      frame.clipPath(facePath, ClipOp.Intersect, true);
+      if (excludePath.countPoints() > 0) {
+        frame.clipPath(excludePath, ClipOp.Difference, true);
       }
-    });
-
-    // Gözler ve dudaklar için hariç tutma bölgeleri
-    const excludePath = Skia.Path.Make();
-    const excludeContours = [
-      "LEFT_EYE",
-      "RIGHT_EYE",
-      "UPPER_LIP_TOP",
-      "UPPER_LIP_BOTTOM",
-      "LOWER_LIP_TOP",
-      "LOWER_LIP_BOTTOM",
-    ];
-    excludeContours.forEach((key) => {
-      if (contours?.[key]) {
-        contours[key].forEach((point, index) => {
-          if (index === 0) {
-            excludePath.moveTo(point.x, point.y);
-          } else {
-            excludePath.lineTo(point.x, point.y);
-          }
-        });
-        excludePath.close();
-      } else {
-      }
-    });
-
-    // Seçili ürünün rengine göre bronzlaştırma filtresi
-    const color = selectedProduct.filterColor;
-    const r = parseInt(color.slice(1, 3), 16) / 255;
-    const g = parseInt(color.slice(3, 5), 16) / 255;
-    const b = parseInt(color.slice(5, 7), 16) / 255;
-    const colorMatrix = [
-      1,
-      0,
-      0,
-      0,
-      r * 0.15,
-      0,
-      1,
-      0,
-      0,
-      g * 0.08,
-      0,
-      0,
-      1,
-      0,
-      b * 0.03,
-      0,
-      0,
-      0,
-      0.6,
-      0,
-    ];
-    const bronzeFilter = Skia.ColorFilter.MakeMatrix(colorMatrix);
-    const bronzePaint = Skia.Paint();
-    bronzePaint.setColorFilter(bronzeFilter);
-    bronzePaint.setBlendMode(BlendMode.Overlay);
-
-    // Kenarları yumuşatmak için blur - alın bölgesi için daha yumuşak geçiş
-    const blurRadius = 12;
-    const blurFilter = Skia.ImageFilter.MakeBlur(
-      blurRadius,
-      blurRadius,
-      TileMode.Clamp,
-      null
-    );
-    bronzePaint.setImageFilter(blurFilter);
-
-    // Yüz bölgesine filtre uygula, gözler ve dudakları hariç tut
-    frame.save();
-    frame.clipPath(facePath, ClipOp.Intersect, true);
-    if (excludePath.countPoints() > 0) {
-      frame.clipPath(excludePath, ClipOp.Difference, true);
-    }
-    frame.render(bronzePaint);
-    frame.restore();
-  }, [selectedProduct]);
+      frame.render(bronzePaint);
+      frame.restore();
+    },
+    [selectedProduct]
+  );
 
   async function takePhoto() {
     try {
@@ -485,7 +511,7 @@ function RealTimeScreen() {
         console.warn("selectedProduct veya filterColor bulunamadı");
         return photo;
       }
-      
+
       // handleSkiaActions'daki aynı bronzlaştırma algoritmasını kullan
       const color = selectedProduct.filterColor;
       const r = parseInt(color.slice(1, 3), 16) / 255;
@@ -768,7 +794,7 @@ function RealTimeScreen() {
   const switchToPreviousProduct = () => {
     const prevProduct = getPreviousProduct();
     if (!prevProduct) return;
-    
+
     // Kaydırma animasyonu - sola kaydırma
     Animated.sequence([
       Animated.timing(slideAnim, {
@@ -804,7 +830,7 @@ function RealTimeScreen() {
   const switchToNextProduct = () => {
     const nextProduct = getNextProduct();
     if (!nextProduct) return;
-    
+
     // Kaydırma animasyonu - sağa kaydırma
     Animated.sequence([
       Animated.timing(slideAnim, {
@@ -868,7 +894,10 @@ function RealTimeScreen() {
       if (/^https?:\/\//.test(filteredPhoto.path)) {
         const fileName = `shared-photo-${Date.now()}.jpg`;
         const fileUri = FileSystem.cacheDirectory + fileName;
-        const downloadRes = await FileSystem.downloadAsync(filteredPhoto.path, fileUri);
+        const downloadRes = await FileSystem.downloadAsync(
+          filteredPhoto.path,
+          fileUri
+        );
         shareUrl = downloadRes.uri;
       }
       await Share.open({
@@ -889,7 +918,10 @@ function RealTimeScreen() {
       if (/^https?:\/\//.test(filteredPhoto.path)) {
         const fileName = `shared-photo-${Date.now()}.jpg`;
         const fileUri = FileSystem.cacheDirectory + fileName;
-        const downloadRes = await FileSystem.downloadAsync(filteredPhoto.path, fileUri);
+        const downloadRes = await FileSystem.downloadAsync(
+          filteredPhoto.path,
+          fileUri
+        );
         shareUrl = downloadRes.uri;
       }
       await Share.open({
@@ -910,7 +942,10 @@ function RealTimeScreen() {
       if (/^https?:\/\//.test(filteredPhoto.path)) {
         const fileName = `shared-photo-${Date.now()}.jpg`;
         const fileUri = FileSystem.cacheDirectory + fileName;
-        const downloadRes = await FileSystem.downloadAsync(filteredPhoto.path, fileUri);
+        const downloadRes = await FileSystem.downloadAsync(
+          filteredPhoto.path,
+          fileUri
+        );
         shareUrl = downloadRes.uri;
       }
       // file:// ile başlamıyorsa ekle
@@ -931,7 +966,10 @@ function RealTimeScreen() {
         failOnCancel: false,
       });
     } catch (e) {
-      Alert.alert("Paylaşım Hatası", "Paylaşım ekranı açılamadı veya bir hata oluştu.");
+      Alert.alert(
+        "Paylaşım Hatası",
+        "Paylaşım ekranı açılamadı veya bir hata oluştu."
+      );
     }
   };
 
@@ -1102,7 +1140,7 @@ function RealTimeScreen() {
             <View style={styles.previewHeader}>
               <View style={styles.productBadge}>
                 <Image
-                  source={{uri: `${API_URL}${selectedProduct.imageUrl}`}}
+                  source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
                   style={styles.productBadgeImage}
                 />
                 <View style={styles.productBadgeContent}>
@@ -1197,14 +1235,22 @@ function RealTimeScreen() {
                         style={styles.shareOption}
                         onPress={handleShareWhatsApp}
                       >
-                        <Ionicons name="logo-whatsapp" size={32} color="#25D366" />
+                        <Ionicons
+                          name="logo-whatsapp"
+                          size={32}
+                          color="#25D366"
+                        />
                         <Text style={styles.shareOptionText}>WhatsApp</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.shareOption}
                         onPress={handleShareInstagram}
                       >
-                        <Ionicons name="logo-instagram" size={32} color="#C13584" />
+                        <Ionicons
+                          name="logo-instagram"
+                          size={32}
+                          color="#C13584"
+                        />
                         <Text style={styles.shareOptionText}>Instagram</Text>
                       </TouchableOpacity>
                     </>
@@ -1293,7 +1339,7 @@ function RealTimeScreen() {
         />
         <View style={styles.productHeader}>
           <Image
-            source={{uri: `${API_URL}${selectedProduct.imageUrl}`}}
+            source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
             style={styles.topProductImage}
           />
           <View style={styles.productInfo}>
@@ -1319,7 +1365,7 @@ function RealTimeScreen() {
         >
           <View style={styles.productInfoHeader}>
             <Image
-              source={{uri: `${API_URL}${selectedProduct.imageUrl}`}}
+              source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
               style={styles.productInfoImage}
             />
             <View style={styles.productInfoContent}>
@@ -1403,7 +1449,9 @@ function RealTimeScreen() {
               {getPreviousProduct() && (
                 <>
                   <Image
-                    source={{uri: `${API_URL}${getPreviousProduct().imageUrl}`}}
+                    source={{
+                      uri: `${API_URL}${getPreviousProduct().imageUrl}`,
+                    }}
                     style={styles.sideProductImage}
                   />
                   <Text style={styles.sideProductName}>
@@ -1443,7 +1491,7 @@ function RealTimeScreen() {
                 </View>
               ) : (
                 <Image
-                  source={{uri: `${API_URL}${selectedProduct.imageUrl}`}}
+                  source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
                   style={styles.mainCaptureButtonImage}
                 />
               )}
@@ -1469,7 +1517,7 @@ function RealTimeScreen() {
               {getNextProduct() && (
                 <>
                   <Image
-                    source={{uri: `${API_URL}${getNextProduct().imageUrl}`}}
+                    source={{ uri: `${API_URL}${getNextProduct().imageUrl}` }}
                     style={styles.sideProductImage}
                   />
                   <Text style={styles.sideProductName}>
