@@ -30,7 +30,6 @@ const WelcomeScreen = () => {
         const response = await fetch(`${API_URL}/api/public/phone/share-photo`);
         const data = await response.json();
         setSharedPhotos(data.data);
-        console.log("Shared Photos:", data.data);
       } catch (e) {
         console.error(e);
       }

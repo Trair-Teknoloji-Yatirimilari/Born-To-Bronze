@@ -330,7 +330,6 @@ const PhotoEditScreen = () => {
     const fetchProducts = async () => {
       const response = await fetch(`${API_URL}/api/products?product=filter`);
       const data = await response.json();
-      console.log(data.products);
       setPRODUCTS(data.products);
     };
     fetchProducts();
@@ -431,7 +430,6 @@ const PhotoEditScreen = () => {
       });
 
       const result = await response.json();
-      console.log(result);
       if (result.success) {
         Alert.alert(
           "Başarılı! 🎉",
@@ -695,7 +693,6 @@ const PhotoEditScreen = () => {
 
   const onGestureStart = (event) => {
     if (showBrushControls) {
-      console.log("closeBrushControls");
       closeBrushControls();
     }
     setIsDrawing(true);
@@ -1050,7 +1047,7 @@ const PhotoEditScreen = () => {
         setSelectedProduct(null);
         setStep(1);
       } else {
-        console.log("Galeri seçimi iptal edildi");
+
       }
     } catch (error) {
       console.error("Galeri hatası:", error);

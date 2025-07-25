@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -15,26 +15,19 @@ import {
   Vibration,
   ActivityIndicator,
   Modal,
+  Dimensions,
 } from "react-native";
 import {
-  DrawableFrame,
-  Camera as VisionCamera,
+  Camera,
   useCameraDevice,
   useCameraPermission,
+  useSkiaFrameProcessor,
   useCameraFormat,
 } from "react-native-vision-camera";
 import { useIsFocused } from "@react-navigation/core";
 import { useAppState } from "@react-native-community/hooks";
-import { Camera, Face } from "react-native-vision-camera-face-detector";
-import {
-  ClipOp,
-  Skia,
-  TileMode,
-  BlendMode,
-  Canvas,
-  useCanvasRef,
-  makeImageFromView,
-} from "@shopify/react-native-skia";
+import { useFaceDetector } from "react-native-vision-camera-face-detector";
+import { ClipOp, Skia, TileMode, BlendMode } from "@shopify/react-native-skia";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
@@ -167,8 +160,10 @@ function RealTimeScreen() {
   const cameraDevice = useCameraDevice(cameraFacing);
   const format = useCameraFormat(cameraDevice, [
     {
-      videoResolution: { width: 854, height: 480 },
-      fps: 30,
+      videoResolution: Dimensions.get("window"),
+    },
+    {
+      fps: 60,
     },
   ]);
   const camera = useRef(null);
@@ -305,122 +300,117 @@ function RealTimeScreen() {
     if (faces.length <= 0) return;
   }
 
-  const handleSkiaActions = useCallback(
-    (faces, frame) => {
-      "worklet";
-      if (faces.length <= 0) return;
+  const { detectFaces } = useFaceDetector({
+    performanceMode: "fast",
+    contourMode: "all",
+    landmarkMode: "none",
+    classificationMode: "none",
+  });
 
-      // selectedProduct kontrolü ekle
-      if (!selectedProduct || !selectedProduct.filterColor) return;
+  const NECESSARY_CONTOURS = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
+  const EXCLUDE_CONTOURS = [
+    "LEFT_EYE",
+    "RIGHT_EYE",
+    "UPPER_LIP_TOP",
+    "UPPER_LIP_BOTTOM",
+    "LOWER_LIP_TOP",
+    "LOWER_LIP_BOTTOM",
+  ];
+  // Paint object created outside of worklet
+  const bronzePaint = useMemo(() => {
+    if (!selectedProduct?.filterColor) return null;
+
+    const hex = selectedProduct.filterColor;
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+
+    const colorMatrix = [
+      1,
+      0,
+      0,
+      0,
+      r * 0.15,
+      0,
+      1,
+      0,
+      0,
+      g * 0.08,
+      0,
+      0,
+      1,
+      0,
+      b * 0.03,
+      0,
+      0,
+      0,
+      0.6,
+      0,
+    ];
+
+    const paint = Skia.Paint();
+    paint.setColorFilter(Skia.ColorFilter.MakeMatrix(colorMatrix));
+    paint.setBlendMode(BlendMode.Overlay);
+    paint.setImageFilter(
+      Skia.ImageFilter.MakeBlur(10, 10, TileMode.Clamp, null)
+    );
+    return paint;
+  }, [selectedProduct?.filterColor]);
+
+  const frameProcessor = useSkiaFrameProcessor(
+    (frame) => {
+      "worklet";
+      frame.render();
+
+      const faces = detectFaces(frame);
+      if (!faces.length || !bronzePaint) return;
 
       const { contours } = faces[0];
+      if (!contours) return;
 
-      // Yüz konturu oluştur
       const facePath = Skia.Path.Make();
-      const necessaryContours = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
-
-      const allPoints = necessaryContours.flatMap(
-        (key) => contours?.[key] || []
+      const allPoints = NECESSARY_CONTOURS.flatMap(
+        (key) => contours[key] || []
       );
-      const maxX = Math.max(...allPoints.map(p => p.x));
-      
-      const scaleX = 1.1; // Yalnızca sağa doğru %20 genişlet
-      
-      necessaryContours.forEach((key) => {
-        if (contours?.[key]) {
-          contours[key].forEach((point, index) => {
-            // Sadece sağa doğru genişlet
-            const newX = maxX + (point.x - maxX) * scaleX;
-            if (index === 0) {
-              facePath.moveTo(newX, point.y);
-            } else {
-              facePath.lineTo(newX, point.y);
-            }
+      const maxX = Math.max(...allPoints.map((p) => p.x));
+      const scaleX = 1.1;
+
+      // 1. Genişletilmiş kontur
+      NECESSARY_CONTOURS.forEach((key) => {
+        const pts = contours[key];
+        if (pts) {
+          pts.forEach(({ x, y }, i) => {
+            const newX = maxX + (x - maxX) * scaleX;
+            i ? facePath.lineTo(newX, y) : facePath.moveTo(newX, y);
           });
           facePath.close();
         }
       });
 
-      necessaryContours.forEach((key) => {
-        if (contours?.[key]) {
-          contours[key].forEach((point, index) => {
-            if (index === 0) {
-              facePath.moveTo(point.x, point.y);
-            } else {
-              facePath.lineTo(point.x, point.y);
-            }
+      // 2. Normal kontur
+      NECESSARY_CONTOURS.forEach((key) => {
+        const pts = contours[key];
+        if (pts) {
+          pts.forEach(({ x, y }, i) => {
+            i ? facePath.lineTo(x, y) : facePath.moveTo(x, y);
           });
           facePath.close();
         }
       });
 
-      // Gözler ve dudaklar için hariç tutma bölgeleri
+      // 3. Hariç tutulacak bölgeler (göz, dudak)
       const excludePath = Skia.Path.Make();
-      const excludeContours = [
-        "LEFT_EYE",
-        "RIGHT_EYE",
-        "UPPER_LIP_TOP",
-        "UPPER_LIP_BOTTOM",
-        "LOWER_LIP_TOP",
-        "LOWER_LIP_BOTTOM",
-      ];
-      excludeContours.forEach((key) => {
-        if (contours?.[key]) {
-          contours[key].forEach((point, index) => {
-            if (index === 0) {
-              excludePath.moveTo(point.x, point.y);
-            } else {
-              excludePath.lineTo(point.x, point.y);
-            }
+      EXCLUDE_CONTOURS.forEach((key) => {
+        const pts = contours[key];
+        if (pts) {
+          pts.forEach(({ x, y }, i) => {
+            i ? excludePath.lineTo(x, y) : excludePath.moveTo(x, y);
           });
           excludePath.close();
-        } else {
         }
       });
 
-      // Seçili ürünün rengine göre bronzlaştırma filtresi
-      const color = selectedProduct.filterColor;
-      const r = parseInt(color.slice(1, 3), 16) / 255;
-      const g = parseInt(color.slice(3, 5), 16) / 255;
-      const b = parseInt(color.slice(5, 7), 16) / 255;
-      const colorMatrix = [
-        1,
-        0,
-        0,
-        0,
-        r * 0.15,
-        0,
-        1,
-        0,
-        0,
-        g * 0.08,
-        0,
-        0,
-        1,
-        0,
-        b * 0.03,
-        0,
-        0,
-        0,
-        0.6,
-        0,
-      ];
-      const bronzeFilter = Skia.ColorFilter.MakeMatrix(colorMatrix);
-      const bronzePaint = Skia.Paint();
-      bronzePaint.setColorFilter(bronzeFilter);
-      bronzePaint.setBlendMode(BlendMode.Overlay);
-
-      // Kenarları yumuşatmak için blur - alın bölgesi için daha yumuşak geçiş
-      const blurRadius = 10;
-      const blurFilter = Skia.ImageFilter.MakeBlur(
-        blurRadius,
-        blurRadius,
-        TileMode.Clamp,
-        null
-      );
-      bronzePaint.setImageFilter(blurFilter);
-
-      // Yüz bölgesine filtre uygula, gözler ve dudakları hariç tut
+      // 4. Çizim
       frame.save();
       frame.clipPath(facePath, ClipOp.Intersect, true);
       if (excludePath.countPoints() > 0) {
@@ -429,7 +419,7 @@ function RealTimeScreen() {
       frame.render(bronzePaint);
       frame.restore();
     },
-    [selectedProduct]
+    [bronzePaint]
   );
 
   async function takePhoto() {
@@ -1304,10 +1294,12 @@ function RealTimeScreen() {
               onError={handleCameraMountError}
               faceDetectionCallback={handleFacesDetected}
               onUIRotationChanged={handleUiRotation}
-              skiaActions={handleSkiaActions}
+              // skiaActions={handleSkiaActions}
+              frameProcessor={frameProcessor}
               faceDetectionOptions={faceDetectionOptions}
               format={format}
               photo={true}
+              exposure={0}
             />
           </Animated.View>
         ) : (
@@ -1389,7 +1381,6 @@ function RealTimeScreen() {
           <Text style={styles.productInfoDescription}>
             {selectedProduct.description}
           </Text>
-
 
           <View style={styles.productInfoActions}>
             <TouchableOpacity
