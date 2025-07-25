@@ -169,6 +169,9 @@ function RealTimeScreen() {
   const [PRODUCTS, setPRODUCTS] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isProductsLoading, setIsProductsLoading] = useState(true); // <-- Loading state
+  const [filterIntensity, setFilterIntensity] = useState(0.4); // Filtre yoğunluğu (0.1 - 1.0)
+  const [isHighPerformanceMode, setIsHighPerformanceMode] = useState(false); // Performans modu
+  const [showFilterSettings, setShowFilterSettings] = useState(false); // Filtre ayarları paneli gösterimi
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -317,36 +320,30 @@ function RealTimeScreen() {
     const g = parseInt(hex.slice(3, 5), 16) / 255;
     const b = parseInt(hex.slice(5, 7), 16) / 255;
 
+    // Dinamik yoğunluk ayarı
+    const intensity = filterIntensity;
+    const baseIntensity = 0.4; // Temel yoğunluk
+
+    // Gelişmiş renk matrisi - daha doğal bronzlaştırma efekti
     const colorMatrix = [
-      1,
-      0,
-      0,
-      0,
-      r * 0.15,
-      0,
-      1,
-      0,
-      0,
-      g * 0.08,
-      0,
-      0,
-      1,
-      0,
-      b * 0.03,
-      0,
-      0,
-      0,
-      0.6,
-      0,
+      1 + (0.1 * intensity), 0, 0, 0, r * (0.12 * intensity),  // Kırmızı kanalı artır
+      0, 1 + (0.05 * intensity), 0, 0, g * (0.08 * intensity), // Yeşil kanalı hafif artır
+      0, 0, 1 - (0.05 * intensity), 0, b * (0.04 * intensity), // Mavi kanalı azalt (sıcak ton)
+      0, 0, 0, 0.85 * intensity, 0,        // Alpha değerini azalt
     ];
 
     const paint = Skia.Paint();
     paint.setColorFilter(Skia.ColorFilter.MakeMatrix(colorMatrix));
+    
+    // Daha yumuşak blend mode kombinasyonu
     paint.setBlendMode(BlendMode.SoftLight);
-    paint.setImageFilter(Skia.ImageFilter.MakeBlur(2, 2, TileMode.Clamp, null));
+    
+    // Performans moduna göre blur ayarı
+    const blurRadius = isHighPerformanceMode ? 1.0 : 2.0;
+    paint.setImageFilter(Skia.ImageFilter.MakeBlur(blurRadius, blurRadius, TileMode.Clamp, null));
 
     return paint;
-  }, [selectedProduct?.filterColor]);
+  }, [selectedProduct?.filterColor, filterIntensity, isHighPerformanceMode]);
 
   const frameProcessor = useSkiaFrameProcessor(
     (frame) => {
@@ -401,21 +398,29 @@ function RealTimeScreen() {
         }
       });
 
+      // Gelişmiş yumuşak geçiş için gradient hesaplama
       const { width: fw, height: fh, x, y } = facePath.getBounds();
       const centerX = x + fw / 2;
       const centerY = y + fh / 2;
+      const radius = Math.max(fw, fh) / 2.2; // Biraz daha küçük radius
 
+      // Daha yumuşak gradient geçişi
       const gradient = Skia.Shader.MakeRadialGradient(
         { x: centerX, y: centerY },
-        Math.max(fw, fh) / 2,
-        [Skia.Color(0x00000000), Skia.Color(0x00000000), Skia.Color("#000000")],
-        [0, 0.5, 1],
+        radius,
+        [
+          Skia.Color(0x00000000), // Tamamen şeffaf merkez
+          Skia.Color(0x00000000), // Şeffaf orta
+          Skia.Color(0x40000000), // Yarı şeffaf dış
+          Skia.Color(0x80000000), // Daha opak dış
+        ],
+        [0, 0.3, 0.7, 1],
         TileMode.Clamp
       );
 
       const featherPaint = Skia.Paint();
       featherPaint.setShader(gradient);
-      featherPaint.setAlphaf(0.9);
+      featherPaint.setAlphaf(0.8);
 
       // 4. Çizim
       frame.save();
@@ -423,7 +428,22 @@ function RealTimeScreen() {
       if (excludePath.countPoints() > 0) {
         frame.clipPath(excludePath, ClipOp.Difference, true);
       }
+      
+      // Gelişmiş filtre uygulama - çoklu katman
+      // 1. Ana bronzlaştırma katmanı
       frame.render(bronzePaint);
+      
+      // 2. Yumuşak geçiş için ek katman
+      const softPaint = Skia.Paint();
+      softPaint.setColorFilter(Skia.ColorFilter.MakeMatrix([
+        1.05, 0, 0, 0, 0.02,
+        0, 1.02, 0, 0, 0.01,
+        0, 0, 0.98, 0, 0,
+        0, 0, 0, 0.3, 0,
+      ]));
+      softPaint.setBlendMode(BlendMode.SoftLight);
+      frame.render(softPaint);
+      
       frame.restore();
     },
     [bronzePaint]
@@ -1541,7 +1561,101 @@ function RealTimeScreen() {
         >
           <Ionicons name="camera-reverse" size={24} color={COLORS.text} />
         </TouchableOpacity>
+        
+        {/* Filtre ayarları butonu */}
+        <TouchableOpacity
+          onPress={() => setShowFilterSettings(!showFilterSettings)}
+          style={[styles.sideButton, { marginTop: 15 }]}
+        >
+          <Ionicons name="settings" size={24} color={COLORS.text} />
+        </TouchableOpacity>
       </View>
+
+      {/* Filtre ayarları paneli */}
+      {showFilterSettings && (
+        <Animated.View style={[styles.filterSettingsPanel, { opacity: fadeAnim }]}>
+          <View style={styles.filterSettingsContainer}>
+            <View style={styles.filterSettingsHeader}>
+              <Text style={styles.filterSettingsTitle}>🎨 Filtre Ayarları</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilterSettings(false)}
+                style={styles.closeSettingsButton}
+              >
+                <Ionicons name="close" size={24} color={COLORS.active} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.filterSettingItem}>
+              <View style={styles.filterSettingHeader}>
+                <Ionicons name="contrast" size={20} color={COLORS.background} />
+                <Text style={styles.filterSettingLabel}>Filtre Yoğunluğu</Text>
+                <Text style={styles.filterSettingValue}>{Math.round(filterIntensity * 100)}%</Text>
+              </View>
+              <View style={styles.sliderContainer}>
+                <TouchableOpacity
+                  style={styles.sliderButton}
+                  onPress={() => setFilterIntensity(Math.max(0.1, filterIntensity - 0.1))}
+                >
+                  <Ionicons name="remove" size={20} color="#fff" />
+                </TouchableOpacity>
+                <View style={styles.sliderTrack}>
+                  <View 
+                    style={[
+                      styles.sliderFill, 
+                      { width: `${filterIntensity * 100}%` }
+                    ]} 
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.sliderButton}
+                  onPress={() => setFilterIntensity(Math.min(1.0, filterIntensity + 0.1))}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <View style={styles.filterSettingItem}>
+              <View style={styles.filterSettingHeader}>
+                <Ionicons name="speedometer" size={20} color={COLORS.background} />
+                <Text style={styles.filterSettingLabel}>Performans Modu</Text>
+                <Text style={styles.filterSettingValue}>
+                  {isHighPerformanceMode ? 'Hızlı' : 'Kaliteli'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.toggleButton,
+                  isHighPerformanceMode && styles.toggleButtonActive
+                ]}
+                onPress={() => setIsHighPerformanceMode(!isHighPerformanceMode)}
+              >
+                <Ionicons 
+                  name={isHighPerformanceMode ? "flash" : "aperture"} 
+                  size={16} 
+                  color="#fff" 
+                />
+                <Text style={styles.toggleButtonText}>
+                  {isHighPerformanceMode ? 'Hızlı Mod' : 'Kalite Modu'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.filterSettingItem}>
+              <View style={styles.filterSettingHeader}>
+                <Ionicons name="information-circle" size={20} color={COLORS.background} />
+                <Text style={styles.filterSettingLabel}>Filtre Bilgisi</Text>
+              </View>
+              <Text style={styles.filterInfoText}>
+                {selectedProduct?.name} - {selectedProduct?.filterColor}
+              </Text>
+              <Text style={styles.filterInfoSubtext}>
+                Gerçek zamanlı yüz algılama ile uygulanan bronzlaştırma filtresi
+              </Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -2139,6 +2253,136 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  // Filter Settings Panel Styles
+  filterSettingsPanel: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 25,
+  },
+  filterSettingsContainer: {
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    padding: 20,
+    width: "90%",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 15,
+  },
+  filterSettingsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 20,
+  },
+  filterSettingsTitle: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  closeSettingsButton: {
+    padding: 5,
+  },
+  filterSettingItem: {
+    marginBottom: 20,
+    width: "100%",
+  },
+  filterSettingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  filterSettingLabel: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "600",
+    marginLeft: 10,
+  },
+  filterSettingValue: {
+    color: "#FF6B35",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  filterInfoText: {
+    color: COLORS.text,
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 10,
+    opacity: 0.8,
+  },
+  filterInfoSubtext: {
+    color: COLORS.text,
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
+    opacity: 0.6,
+  },
+  sliderContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 10,
+    padding: 5,
+  },
+  sliderTrack: {
+    flex: 1,
+    height: 8,
+    backgroundColor: "rgba(255,255,255,0.5)",
+    borderRadius: 4,
+    marginHorizontal: 5,
+  },
+  sliderFill: {
+    height: "100%",
+    backgroundColor: "#FF6B35",
+    borderRadius: 4,
+  },
+  sliderButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#FF6B35",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.5)",
+  },
+  sliderButtonText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  toggleButton: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.5)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+  },
+  toggleButtonActive: {
+    backgroundColor: "#FF6B35",
+    borderColor: "#FF6B35",
+  },
+  toggleButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 8,
   },
 });
 
