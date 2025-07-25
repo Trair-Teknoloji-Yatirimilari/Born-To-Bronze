@@ -2115,17 +2115,18 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   shareOptionsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
+    flexDirection: "column",
+    justifyContent: "center",
     width: "100%",
     marginBottom: 20,
+    gap: 10,
   },
   shareOption: {
     alignItems: "center",
     paddingVertical: 15,
     paddingHorizontal: 20,
     borderRadius: 10,
-    width: "30%",
+    width: "100%",
     backgroundColor: "rgba(0,0,0,0.05)",
   },
   shareOptionText: {

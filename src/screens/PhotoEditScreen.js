@@ -2001,6 +2001,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     textAlign: "center",
+    fontSize: 12,
   },
   imageContainer: {
     width: "100%",

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Eda",
     "slug": "bronze-cream",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -22,11 +22,11 @@
         "NSPhotoLibraryUsageDescription": "Eda uygulamasının fotoğraflarınıza erişmesine izin verin",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "1" 
+      "buildNumber": "2" 
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#F4EBD0"
       },
       "package": "com.bronzecream.app",
