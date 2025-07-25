@@ -12,6 +12,7 @@
     "build:ios": "eas build -p ios"
   },
   "dependencies": {
+    "@expo/config-plugins": "~10.1.1",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@react-native-community/hooks": "^100.1.0",
     "@react-native-community/slider": "4.5.6",
@@ -19,7 +20,7 @@
     "@react-navigation/native": "^7.1.10",
     "@react-navigation/native-stack": "^7.3.14",
     "@shopify/react-native-skia": "v2.0.0-next.4",
-    "expo": "53.0.19",
+    "expo": "^53.0.19",
     "expo-build-properties": "~0.14.8",
     "expo-dev-client": "~5.2.4",
     "expo-image-manipulator": "~13.1.7",
@@ -40,8 +41,7 @@
     "react-native-vision-camera": "^4.7.0",
     "react-native-vision-camera-face-detector": "^1.8.6",
     "react-native-webview": "13.13.5",
-    "react-native-worklets-core": "^1.5.0",
-    "@expo/config-plugins": "~10.1.1"
+    "react-native-worklets-core": "^1.5.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

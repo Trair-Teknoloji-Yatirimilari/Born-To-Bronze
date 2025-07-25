@@ -290,7 +290,7 @@ function RealTimeScreen() {
     }
   }, [isProcessingPhoto, isUploading, isSharing]);
 
-  function handleUiRotation(rotation) {}
+  function handleUiRotation(rotation) { }
 
   function handleCameraMountError(error) {
     console.error("camera mount error", error);
@@ -350,10 +350,12 @@ function RealTimeScreen() {
 
     const paint = Skia.Paint();
     paint.setColorFilter(Skia.ColorFilter.MakeMatrix(colorMatrix));
-    paint.setBlendMode(BlendMode.Overlay);
+    paint.setBlendMode(BlendMode.SoftLight);
     paint.setImageFilter(
-      Skia.ImageFilter.MakeBlur(10, 10, TileMode.Clamp, null)
+      Skia.ImageFilter.MakeBlur(2, 2, TileMode.Clamp, null)
     );
+
+
     return paint;
   }, [selectedProduct?.filterColor]);
 
@@ -409,6 +411,22 @@ function RealTimeScreen() {
           excludePath.close();
         }
       });
+
+      const { width: fw, height: fh, x, y } = facePath.getBounds();
+      const centerX = x + fw / 2;
+      const centerY = y + fh / 2;
+    
+      const gradient = Skia.Shader.MakeRadialGradient(
+        { x: centerX, y: centerY },
+        Math.max(fw, fh) / 2,
+        [Skia.Color(0x00000000), Skia.Color(0x00000000), Skia.Color(0x99000000)],
+        [0, 0.5, 1],
+        TileMode.Clamp
+      );
+    
+      const featherPaint = Skia.Paint();
+      featherPaint.setShader(gradient);
+      featherPaint.setAlphaf(0.9);
 
       // 4. Çizim
       frame.save();
@@ -897,7 +915,7 @@ function RealTimeScreen() {
         social: Share.Social.WHATSAPP,
         failOnCancel: false,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
   const handleShareInstagram = async () => {
     setShareModalVisible(false);
@@ -921,7 +939,7 @@ function RealTimeScreen() {
         social: Share.Social.INSTAGRAM,
         failOnCancel: false,
       });
-    } catch (e) {}
+    } catch (e) { }
   };
   const handleShareOther = async () => {
     setShareModalVisible(false);
