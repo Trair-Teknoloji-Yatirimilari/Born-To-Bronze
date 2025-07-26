@@ -146,20 +146,12 @@ function RealTimeScreen() {
   const dot1Anim = useRef(new Animated.Value(0)).current;
   const dot2Anim = useRef(new Animated.Value(0)).current;
   const dot3Anim = useRef(new Animated.Value(0)).current;
-  const faceDetectionOptions = useRef({
-    performanceMode: "fast",
-    classificationMode: "all",
-    contourMode: "all",
-    landmarkMode: "all",
-    windowWidth: width,
-    windowHeight: height,
-  }).current;
   const isFocused = useIsFocused();
   const appState = useAppState();
   const isCameraActive = isFocused && appState === "active";
   const cameraDevice = useCameraDevice(cameraFacing);
   const format = useCameraFormat(cameraDevice, [
-   // { videoAspectRatio: 16 / 9 }, //TODO: Performans sorunu olursa kapat
+    // { videoAspectRatio: 16 / 9 }, //TODO: Performans sorunu olursa kapat
     { videoResolution: Dimensions.get("window") },
     { fps: 30 },
   ]);
@@ -169,8 +161,7 @@ function RealTimeScreen() {
   const [PRODUCTS, setPRODUCTS] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isProductsLoading, setIsProductsLoading] = useState(true); // <-- Loading state
-  const [filterIntensity, setFilterIntensity] = useState(0.4); // Filtre yoğunluğu (0.1 - 1.0)
-  const [isHighPerformanceMode, setIsHighPerformanceMode] = useState(false); // Performans modu
+  const [filterIntensity, setFilterIntensity] = useState(0.5); // Filtre yoğunluğu (0.1 - 1.0)
   const [showFilterSettings, setShowFilterSettings] = useState(false); // Filtre ayarları paneli gösterimi
 
   useEffect(() => {
@@ -297,9 +288,11 @@ function RealTimeScreen() {
 
   const { detectFaces } = useFaceDetector({
     performanceMode: "fast",
+    classificationMode: "all",
     contourMode: "all",
-    landmarkMode: "none",
-    classificationMode: "none",
+    landmarkMode: "all",
+    windowWidth: width,
+    windowHeight: height,
   });
 
   const NECESSARY_CONTOURS = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
@@ -326,24 +319,38 @@ function RealTimeScreen() {
 
     // Gelişmiş renk matrisi - daha doğal bronzlaştırma efekti
     const colorMatrix = [
-      1 + (0.1 * intensity), 0, 0, 0, r * (0.12 * intensity),  // Kırmızı kanalı artır
-      0, 1 + (0.05 * intensity), 0, 0, g * (0.08 * intensity), // Yeşil kanalı hafif artır
-      0, 0, 1 - (0.05 * intensity), 0, b * (0.04 * intensity), // Mavi kanalı azalt (sıcak ton)
-      0, 0, 0, 0.85 * intensity, 0,        // Alpha değerini azalt
+      1 + 0.1 * intensity,
+      0,
+      0,
+      0,
+      r * (0.12 * intensity), // Kırmızı kanalı artır
+      0,
+      1 + 0.05 * intensity,
+      0,
+      0,
+      g * (0.08 * intensity), // Yeşil kanalı hafif artır
+      0,
+      0,
+      1 - 0.05 * intensity,
+      0,
+      b * (0.04 * intensity), // Mavi kanalı azalt (sıcak ton)
+      0,
+      0,
+      0,
+      0.85 * intensity,
+      0, // Alpha değerini azalt
     ];
 
     const paint = Skia.Paint();
     paint.setColorFilter(Skia.ColorFilter.MakeMatrix(colorMatrix));
-    
+
     // Daha yumuşak blend mode kombinasyonu
     paint.setBlendMode(BlendMode.SoftLight);
-    
-    // Performans moduna göre blur ayarı
-    const blurRadius = isHighPerformanceMode ? 1.0 : 2.0;
-    paint.setImageFilter(Skia.ImageFilter.MakeBlur(blurRadius, blurRadius, TileMode.Clamp, null));
+
+    paint.setImageFilter(Skia.ImageFilter.MakeBlur(2, 2, TileMode.Clamp, null));
 
     return paint;
-  }, [selectedProduct?.filterColor, filterIntensity, isHighPerformanceMode]);
+  }, [selectedProduct?.filterColor, filterIntensity]);
 
   const frameProcessor = useSkiaFrameProcessor(
     (frame) => {
@@ -402,19 +409,13 @@ function RealTimeScreen() {
       const { width: fw, height: fh, x, y } = facePath.getBounds();
       const centerX = x + fw / 2;
       const centerY = y + fh / 2;
-      const radius = Math.max(fw, fh) / 2.2; // Biraz daha küçük radius
 
       // Daha yumuşak gradient geçişi
       const gradient = Skia.Shader.MakeRadialGradient(
         { x: centerX, y: centerY },
-        radius,
-        [
-          Skia.Color(0x00000000), // Tamamen şeffaf merkez
-          Skia.Color(0x00000000), // Şeffaf orta
-          Skia.Color(0x40000000), // Yarı şeffaf dış
-          Skia.Color(0x80000000), // Daha opak dış
-        ],
-        [0, 0.3, 0.7, 1],
+        Math.max(fw, fh) / 2,
+        [Skia.Color(0x00000000), Skia.Color(0x00000000), Skia.Color("#000000")],
+        [0, 0.5, 1],
         TileMode.Clamp
       );
 
@@ -428,22 +429,11 @@ function RealTimeScreen() {
       if (excludePath.countPoints() > 0) {
         frame.clipPath(excludePath, ClipOp.Difference, true);
       }
-      
+
       // Gelişmiş filtre uygulama - çoklu katman
       // 1. Ana bronzlaştırma katmanı
       frame.render(bronzePaint);
-      
-      // 2. Yumuşak geçiş için ek katman
-      const softPaint = Skia.Paint();
-      softPaint.setColorFilter(Skia.ColorFilter.MakeMatrix([
-        1.05, 0, 0, 0, 0.02,
-        0, 1.02, 0, 0, 0.01,
-        0, 0, 0.98, 0, 0,
-        0, 0, 0, 0.3, 0,
-      ]));
-      softPaint.setBlendMode(BlendMode.SoftLight);
-      frame.render(softPaint);
-      
+
       frame.restore();
     },
     [bronzePaint]
@@ -1322,7 +1312,6 @@ function RealTimeScreen() {
               faceDetectionCallback={handleFacesDetected}
               onUIRotationChanged={handleUiRotation}
               frameProcessor={frameProcessor}
-              faceDetectionOptions={faceDetectionOptions}
               format={format}
               photo={true}
               exposure={0}
@@ -1561,7 +1550,7 @@ function RealTimeScreen() {
         >
           <Ionicons name="camera-reverse" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        
+
         {/* Filtre ayarları butonu */}
         <TouchableOpacity
           onPress={() => setShowFilterSettings(!showFilterSettings)}
@@ -1573,7 +1562,9 @@ function RealTimeScreen() {
 
       {/* Filtre ayarları paneli */}
       {showFilterSettings && (
-        <Animated.View style={[styles.filterSettingsPanel, { opacity: fadeAnim }]}>
+        <Animated.View
+          style={[styles.filterSettingsPanel, { opacity: fadeAnim }]}
+        >
           <View style={styles.filterSettingsContainer}>
             <View style={styles.filterSettingsHeader}>
               <Text style={styles.filterSettingsTitle}>🎨 Filtre Ayarları</Text>
@@ -1584,66 +1575,50 @@ function RealTimeScreen() {
                 <Ionicons name="close" size={24} color={COLORS.active} />
               </TouchableOpacity>
             </View>
-            
+
             <View style={styles.filterSettingItem}>
               <View style={styles.filterSettingHeader}>
                 <Ionicons name="contrast" size={20} color={COLORS.background} />
                 <Text style={styles.filterSettingLabel}>Filtre Yoğunluğu</Text>
-                <Text style={styles.filterSettingValue}>{Math.round(filterIntensity * 100)}%</Text>
+                <Text style={styles.filterSettingValue}>
+                  {Math.round(filterIntensity * 100)}%
+                </Text>
               </View>
               <View style={styles.sliderContainer}>
                 <TouchableOpacity
                   style={styles.sliderButton}
-                  onPress={() => setFilterIntensity(Math.max(0.1, filterIntensity - 0.1))}
+                  onPress={() =>
+                    setFilterIntensity(Math.max(0.1, filterIntensity - 0.1))
+                  }
                 >
                   <Ionicons name="remove" size={20} color="#fff" />
                 </TouchableOpacity>
                 <View style={styles.sliderTrack}>
-                  <View 
+                  <View
                     style={[
-                      styles.sliderFill, 
-                      { width: `${filterIntensity * 100}%` }
-                    ]} 
+                      styles.sliderFill,
+                      { width: `${filterIntensity * 100}%` },
+                    ]}
                   />
                 </View>
                 <TouchableOpacity
                   style={styles.sliderButton}
-                  onPress={() => setFilterIntensity(Math.min(1.0, filterIntensity + 0.1))}
+                  onPress={() =>
+                    setFilterIntensity(Math.min(1.0, filterIntensity + 0.1))
+                  }
                 >
                   <Ionicons name="add" size={20} color="#fff" />
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             <View style={styles.filterSettingItem}>
               <View style={styles.filterSettingHeader}>
-                <Ionicons name="speedometer" size={20} color={COLORS.background} />
-                <Text style={styles.filterSettingLabel}>Performans Modu</Text>
-                <Text style={styles.filterSettingValue}>
-                  {isHighPerformanceMode ? 'Hızlı' : 'Kaliteli'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.toggleButton,
-                  isHighPerformanceMode && styles.toggleButtonActive
-                ]}
-                onPress={() => setIsHighPerformanceMode(!isHighPerformanceMode)}
-              >
-                <Ionicons 
-                  name={isHighPerformanceMode ? "flash" : "aperture"} 
-                  size={16} 
-                  color="#fff" 
+                <Ionicons
+                  name="information-circle"
+                  size={20}
+                  color={COLORS.background}
                 />
-                <Text style={styles.toggleButtonText}>
-                  {isHighPerformanceMode ? 'Hızlı Mod' : 'Kalite Modu'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.filterSettingItem}>
-              <View style={styles.filterSettingHeader}>
-                <Ionicons name="information-circle" size={20} color={COLORS.background} />
                 <Text style={styles.filterSettingLabel}>Filtre Bilgisi</Text>
               </View>
               <Text style={styles.filterInfoText}>
