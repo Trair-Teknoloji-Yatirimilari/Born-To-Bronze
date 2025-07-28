@@ -173,7 +173,7 @@ function RealTimeScreen() {
         setPRODUCTS(data.products);
         setSelectedProduct(data.products[1]);
         if (data.products.length > 0) {
-          setIsProductsLoading(false);
+          setIsProductsLoading(false); 
         }
       } catch (e) {
         console.error("Ürünler yüklenirken hata:", e);
@@ -987,24 +987,110 @@ function RealTimeScreen() {
     }
   };
 
-  if (isProductsLoading || !selectedProduct) {
+  // Shimmer Effect Component
+  const Shimmer = ({ children, style }) => {
+    const animatedValue = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      const animation = Animated.loop(
+        Animated.timing(animatedValue, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        })
+      );
+      
+      animation.start();
+      
+      return () => {
+        animation.stop();
+      };
+    }, []);
+
+    const translateX = animatedValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-width, width],
+    });
+
     return (
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            justifyContent: "center",
-            alignItems: "center",
-            backgroundColor: "#fff",
-          },
-        ]}
-      >
-        <Text style={{ fontSize: 20, color: "#FF6B35", fontWeight: "bold" }}>
-          {isProductsLoading ? "Ürünler yükleniyor..." : "Ürün seçiliyor..."}
-        </Text>
-        {/* Buraya isterseniz animasyonlu loading dots veya spinner ekleyebilirsiniz */}
+      <View style={[{ backgroundColor: "#e0e0e0", overflow: "hidden" }, style]}>
+        {children}
+        <Animated.View
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            transform: [{ translateX }],
+            backgroundColor: "rgba(255, 255, 255, 0.4)",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.1,
+            shadowRadius: 2,
+            elevation: 2,
+          }}
+        />
       </View>
     );
+  };
+
+  const LoadingPlaceholder = () => (
+    <View style={StyleSheet.absoluteFill}>
+      <StatusBar barStyle="light-content" backgroundColor="black" />
+      
+      {/* Camera view placeholder */}
+      <View style={StyleSheet.absoluteFill}>
+        <Shimmer style={StyleSheet.absoluteFill} />
+      </View>
+
+      {/* Top Bar */}
+      <View style={styles.topBar}>
+        <LinearGradient
+          colors={["rgba(0,0,0,0.7)", "transparent"]}
+          style={styles.topBarGradient}
+        />
+        <View style={styles.productHeader}>
+          <Shimmer style={styles.topProductImage} />
+          <View style={styles.productInfo}>
+            <Shimmer style={{ height: 18, width: 120, marginBottom: 4 }} />
+            <Shimmer style={{ height: 14, width: 100 }} />
+          </View>
+        </View>
+        <Shimmer style={styles.helpButton} />
+      </View>
+
+      {/* Bottom Container */}
+      <View style={styles.bottomContainer}>
+        {/* Sol yan ürün */}
+        <View style={styles.sideProduct}>
+          <View style={styles.sideProductContainer}>
+            <Shimmer style={styles.sideProductImage} />
+            <Shimmer style={{ height: 10, width: 50, marginTop: 6 }} />
+          </View>
+        </View>
+
+        {/* Ana fotoğraf çekme butonu */}
+        <View style={styles.mainCaptureButton}>
+          <Shimmer style={styles.captureButtonGradient} />
+          <Shimmer style={styles.innerMainCaptureButton} />
+          <Shimmer style={styles.mainCaptureButtonImage} />
+        </View>
+
+        {/* Sağ yan ürün */}
+        <View style={styles.sideProduct}>
+          <View style={styles.sideProductContainer}>
+            <Shimmer style={styles.sideProductImage} />
+            <Shimmer style={{ height: 10, width: 50, marginTop: 6 }} />
+          </View>
+        </View>
+      </View>
+
+      {/* Swipe indicator */}
+      <View style={styles.swipeIndicator}>
+        <Shimmer style={{ height: 14, width: 100, alignSelf: 'center', }} />
+      </View>
+    </View>
+  );
+
+  if (isProductsLoading || !selectedProduct) {
+    return <LoadingPlaceholder />;
   }
 
   if (capturedPhoto) {
@@ -2424,6 +2510,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.button,
     color: COLORS.background,
   },
+
+
 });
 
 export default RealTimeScreen;
