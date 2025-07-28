@@ -420,7 +420,6 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
         <Ionicons name="shield-checkmark" size={16} color={COLORS.text} />
         <Text style={styles.permissionNoteText}>
           Kamera verileriniz güvenlidir ve sadece uygulamada kullanılır.
-          Eda hiçbir veriyi saklamaz.
         </Text>
       </View>
     </Animated.View>
@@ -778,16 +777,12 @@ const styles = StyleSheet.create({
   permissionNote: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.button,
     paddingHorizontal: 15,
     paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.text,
   },
   permissionNoteText: {
     color: COLORS.text,
-    fontSize: 12,
+    fontSize: 10,
     marginLeft: 8,
     flex: 1,
   },
