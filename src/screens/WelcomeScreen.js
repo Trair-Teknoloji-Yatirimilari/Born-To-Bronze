@@ -54,17 +54,26 @@ const WelcomeScreen = () => {
       return null;
     }
 
-    const photoHeight = 150;
-    const photoWidth = 150;
-    const gap = 20;
-    const basePhotos = Array(5).fill(sharedPhotos).flat(); // Fotoğrafları 5 kez tekrar et
-
-    return basePhotos.map((photo, idx) => {
-      let imageUrl = photo.url;
-      if (imageUrl && !imageUrl.startsWith("http")) {
-        imageUrl = `${API_URL}${imageUrl}`;
+    const screenHeight = Dimensions.get("window").height;
+    const screenWidth = Dimensions.get("window").width;
+    const photoHeight = screenHeight / 2; // Her fotoğraf ekranın yarısı kadar yükseklikte
+    const photoWidth = screenWidth / 2; // Her fotoğraf ekranın yarısı kadar genişlikte
+    const gap = 0;
+    
+    // Fotoğrafları 2'şerli gruplar halinde düzenle
+    const groupedPhotos = [];
+    for (let i = 0; i < sharedPhotos.length; i += 2) {
+      const group = sharedPhotos.slice(i, i + 2);
+      if (group.length === 1) {
+        // Tek fotoğraf kaldıysa, aynı fotoğrafı iki kez kullan
+        group.push(sharedPhotos[0]);
       }
+      groupedPhotos.push(group);
+    }
+    
+    const basePhotos = Array(5).fill(groupedPhotos).flat(); // Grupları 5 kez tekrar et
 
+    return basePhotos.map((photoGroup, groupIdx) => {
       const totalLength = (photoHeight + gap) * basePhotos.length;
       const startY = 0;
       const endY = -totalLength;
@@ -74,30 +83,46 @@ const WelcomeScreen = () => {
         outputRange: [startY, endY],
       });
 
-      const topOffset = idx * (photoHeight + gap);
-      const zigzagX = (SCREEN_WIDTH - photoWidth) / 2 + (idx % 2 === 0 ? -30 : 30);
+      const topOffset = groupIdx * (photoHeight + gap);
 
       return (
-        <Animated.Image
-          key={`photo_${idx}`}
-          source={{ uri: imageUrl }}
+        <Animated.View
+          key={`group_${groupIdx}`}
           style={{
             position: "absolute",
             top: topOffset,
             left: 0,
             right: 0,
-            width: photoWidth,
+            width: screenWidth,
             height: photoHeight,
-            borderRadius: 15,
-            transform: [{ translateY }, { translateX: new Animated.Value(zigzagX) }],
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            elevation: 5,
+            transform: [{ translateY }],
+            flexDirection: "row",
           }}
-          resizeMode="cover"
-        />
+        >
+          {photoGroup.map((photo, photoIdx) => {
+            let imageUrl = photo.url;
+            if (imageUrl && !imageUrl.startsWith("http")) {
+              imageUrl = `${API_URL}${imageUrl}`;
+            }
+
+            return (
+              <Image
+                key={`photo_${groupIdx}_${photoIdx}`}
+                source={{ uri: imageUrl }}
+                style={{
+                  width: photoWidth,
+                  height: photoHeight,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 3.84,
+                  elevation: 5,
+                }}
+                resizeMode="cover"
+              />
+            );
+          })}
+        </Animated.View>
       );
     });
   };
