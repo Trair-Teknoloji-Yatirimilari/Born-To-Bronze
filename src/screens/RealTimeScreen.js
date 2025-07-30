@@ -120,7 +120,10 @@ function RealTimeScreen() {
   const { width, height } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraFacing, setCameraFacing] = useState("front");
-
+  // const format = useCameraFormat(cameraDevice, [
+  //   { videoResolution: Dimensions.get("window") },
+  //   { fps: 30 },
+  // ]);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [filteredPhoto, setFilteredPhoto] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -134,7 +137,6 @@ function RealTimeScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [imageLoading, setImageLoading] = useState(false); // Fotoğraf yükleniyor mu?
-  const [filterMode, setFilterMode] = useState("Color");
 
   // Animasyonlar
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -151,17 +153,13 @@ function RealTimeScreen() {
   const appState = useAppState();
   const isCameraActive = isFocused && appState === "active";
   const cameraDevice = useCameraDevice(cameraFacing);
-  const format = useCameraFormat(cameraDevice, [
-    { videoResolution: Dimensions.get("window") },
-    { fps: 30 },
-  ]);
+
   const camera = useRef(null);
   const viewShotRef = useRef(null);
 
   const [PRODUCTS, setPRODUCTS] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isProductsLoading, setIsProductsLoading] = useState(true); // <-- Loading state
-  const [filterIntensity, setFilterIntensity] = useState(1.0); // Filtre yoğunluğu (0.1 - 1.5)
   const [showFilterSettings, setShowFilterSettings] = useState(false); // Filtre ayarları paneli gösterimi
 
   useEffect(() => {
@@ -316,8 +314,8 @@ function RealTimeScreen() {
     const g = parseInt(hex.slice(3, 5), 16) / 255;
     const b = parseInt(hex.slice(5, 7), 16) / 255;
 
-    // Dinamik yoğunluk ayarı
-    const intensity = filterIntensity;
+    // Ürün verisinden gelen intensity değeri, yoksa varsayılan 1.0
+    const intensity = selectedProduct?.intensity || 1.0;
 
     // Daha gerçekçi bronz efekti için geliştirilmiş renk matrisi
     // Bu matris, orijinal renkleri koruyarak bronz tonunu daha doğal şekilde uygular
@@ -353,11 +351,13 @@ function RealTimeScreen() {
 
     const paint = Skia.Paint();
     paint.setColorFilter(Skia.ColorFilter.MakeMatrix(colorMatrix));
-    paint.setBlendMode(BlendMode[filterMode]);
+    // Ürün verisinden gelen filterType, yoksa varsayılan "Color"
+    const filterType = selectedProduct?.filterType || "Color";
+    paint.setBlendMode(BlendMode[filterType]);
     paint.setImageFilter(Skia.ImageFilter.MakeBlur(1.5, 1.5, TileMode.Clamp, null));
 
     return paint;
-  }, [selectedProduct?.filterColor, filterIntensity, filterMode]);
+  }, [selectedProduct?.filterColor, selectedProduct?.intensity, selectedProduct?.filterType]);
 
   // Cache'lenmiş path'ler için ref'ler
   const facePathRef = useRef(null);
@@ -454,7 +454,7 @@ function RealTimeScreen() {
 
       frame.restore();
     },
-    [bronzePaint, filterMode]
+    [bronzePaint]
   );
 
   async function takePhoto() {
@@ -520,8 +520,8 @@ function RealTimeScreen() {
         filterInfo: {
           productName: selectedProduct.name,
           productColor: selectedProduct.filterColor,
-          filterType: "bronze_glow",
-          intensity: 0.6,
+          filterType: selectedProduct?.filterType || "Color",
+          intensity: selectedProduct?.intensity || 1.0,
           appliedAt: new Date().toISOString(),
         },
       });
@@ -579,8 +579,8 @@ function RealTimeScreen() {
           intensityR: r * 0.15,
           intensityG: g * 0.08,
           intensityB: b * 0.03,
-          blendMode: "soft_light",
-          alpha: 0.6,
+          blendMode: selectedProduct?.filterType || "Color",
+          alpha: selectedProduct?.intensity || 1.0,
         },
       };
     } catch (error) {
@@ -1403,7 +1403,7 @@ function RealTimeScreen() {
               faceDetectionCallback={handleFacesDetected}
               onUIRotationChanged={handleUiRotation}
               frameProcessor={frameProcessor}
-              format={format}
+              // format={format}
               photo={true}
               exposure={0}
             />
@@ -1642,12 +1642,12 @@ function RealTimeScreen() {
           <Ionicons name="camera-reverse" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
-        {/* Filtre ayarları butonu */}
+        {/* Filtre bilgileri butonu */}
         <TouchableOpacity
           onPress={() => setShowFilterSettings(!showFilterSettings)}
           style={[styles.sideButton, { marginTop: 15 }]}
         >
-          <Ionicons name="settings" size={24} color={COLORS.text} />
+          <Ionicons name="information-circle" size={24} color={COLORS.text} />
         </TouchableOpacity>
       </View>
 
@@ -1658,7 +1658,7 @@ function RealTimeScreen() {
         >
           <View style={styles.filterSettingsContainer}>
             <View style={styles.filterSettingsHeader}>
-              <Text style={styles.filterSettingsTitle}>🎨 Filtre Ayarları</Text>
+              <Text style={styles.filterSettingsTitle}>ℹ️ Filtre Bilgileri</Text>
               <TouchableOpacity
                 onPress={() => setShowFilterSettings(false)}
                 style={styles.closeSettingsButton}
@@ -1667,41 +1667,7 @@ function RealTimeScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.filterSettingItem}>
-              <View style={styles.filterSettingHeader}>
-                <Ionicons name="contrast" size={20} color={COLORS.background} />
-                <Text style={styles.filterSettingLabel}>Filtre Yoğunluğu</Text>
-                <Text style={styles.filterSettingValue}>
-                  {Math.round((filterIntensity / 1.5) * 100)}%
-                </Text>
-              </View>
-              <View style={styles.sliderContainer}>
-                <TouchableOpacity
-                  style={styles.sliderButton}
-                  onPress={() =>
-                    setFilterIntensity(Math.max(0.1, filterIntensity - 0.1))
-                  }
-                >
-                  <Ionicons name="remove" size={20} color="#fff" />
-                </TouchableOpacity>
-                <View style={styles.sliderTrack}>
-                  <View
-                    style={[
-                      styles.sliderFill,
-                      { width: `${(filterIntensity / 1.5) * 100}%` },
-                    ]}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={styles.sliderButton}
-                  onPress={() =>
-                    setFilterIntensity(Math.min(1.5, filterIntensity + 0.1))
-                  }
-                >
-                  <Ionicons name="add" size={20} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            </View>
+
 
             <View style={styles.filterSettingItem}>
               <View style={styles.filterSettingHeader}>
@@ -1713,38 +1679,17 @@ function RealTimeScreen() {
                 <Text style={styles.filterSettingLabel}>Filtre Bilgisi</Text>
               </View>
               <View style={styles.filterSettingHeader}>
-                <View style={styles.filterModeContainer}>
-                  <TouchableOpacity
-                    onPress={() => setFilterMode("SoftLight")}
-                    style={[
-                      styles.filterModeButton,
-                      filterMode === "SoftLight" && styles.activeFilterMode,
-                    ]}
-                  >
-                    <Text style={styles.filterModeText}>İnce</Text>
-                  </TouchableOpacity>
+                <View style={styles.filterInfoContainer}>
+                  <Text style={styles.filterInfoLabel}>Filtre Tipi:</Text>
+                  <Text style={styles.filterInfoValue}>
+                    {selectedProduct?.filterType || "Color"}
+                  </Text>
                 </View>
-                <View style={styles.filterModeContainer}>
-                  <TouchableOpacity
-                    onPress={() => setFilterMode("Color")}
-                    style={[
-                      styles.filterModeButton,
-                      filterMode === "Color" && styles.activeFilterMode,
-                    ]}
-                  >
-                    <Text style={styles.filterModeText}>Normal</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.filterModeContainer}>
-                  <TouchableOpacity
-                    onPress={() => setFilterMode("Overlay")}
-                    style={[
-                      styles.filterModeButton,
-                      filterMode === "Overlay" && styles.activeFilterMode,
-                    ]}
-                  >
-                    <Text style={styles.filterModeText}>Yoğun</Text>
-                  </TouchableOpacity>
+                <View style={styles.filterInfoContainer}>
+                  <Text style={styles.filterInfoLabel}>Yoğunluk:</Text>
+                  <Text style={styles.filterInfoValue}>
+                    {selectedProduct?.intensity || 1.0}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.filterInfoText}>
@@ -2509,6 +2454,23 @@ const styles = StyleSheet.create({
   activeFilterMode: {
     backgroundColor: COLORS.button,
     color: COLORS.background,
+  },
+  filterInfoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingHorizontal: 10,
+  },
+  filterInfoLabel: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  filterInfoValue: {
+    color: "#FF6B35",
+    fontSize: 14,
+    fontWeight: "700",
   },
 
 
