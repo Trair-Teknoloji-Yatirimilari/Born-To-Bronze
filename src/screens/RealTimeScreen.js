@@ -16,7 +16,7 @@ import {
   ActivityIndicator,
   Modal,
   Dimensions,
-  ScrollView
+  ScrollView,
 } from "react-native";
 import {
   Camera,
@@ -123,17 +123,17 @@ function RealTimeScreen() {
   const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraFacing, setCameraFacing] = useState("front");
   const cameraDevice = useCameraDevice(cameraFacing);
-  
+
   // Çözünürlük seçenekleri ve state
   const [selectedResolution, setSelectedResolution] = useState("phone");
-  
+
   const resolutionOptions = {
     "480p": { width: 640, height: 480 },
     "720p": { width: 1280, height: 720 },
     "1080p": { width: 1920, height: 1080 },
-    "phone": Dimensions.get("window"),
+    phone: Dimensions.get("window"),
   };
-  
+
   const format = useCameraFormat(cameraDevice, [
     {
       videoResolution: resolutionOptions[selectedResolution],
@@ -177,7 +177,6 @@ function RealTimeScreen() {
   const [PRODUCTS, setPRODUCTS] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isProductsLoading, setIsProductsLoading] = useState(true); // <-- Loading state
-
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -1483,125 +1482,149 @@ function RealTimeScreen() {
 
       {/* Product info overlay */}
       {showHelp && (
-          <Animated.View
+        <Animated.View
           style={[styles.productInfoOverlay, { opacity: fadeAnim }]}
         >
-        <ScrollView style={{flex: 1}}>
-          <View style={styles.productInfoHeader}>
-            <Image
-              source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
-              style={styles.productInfoImage}
-            />
-            <View style={styles.productInfoContent}>
-              <Text style={styles.productInfoTitle}>
-                {selectedProduct.name}
-              </Text>
-              <Text style={styles.productInfoPrice}>
-                ₺{selectedProduct.price.toFixed(2)}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.closeInfoButton}
-              onPress={() => setShowHelp(false)}
-            >
-              <Ionicons name="close" size={20} color={COLORS.text} />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.productInfoDescription}>
-            {selectedProduct.description}
-          </Text>
-
-          <View style={styles.productInfoActions}>
-            <TouchableOpacity
-              style={styles.infoActionButton}
-              onPress={() => Linking.openURL(selectedProduct.link)}
-            >
-              <Text style={styles.infoActionText}>Sitede Keşfet</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.productInfoActions}>
-            <TouchableOpacity
-              style={styles.infoActionButton}
-              onPress={() => setShowHelp(false)}
-            >
-              <Text style={styles.infoActionText}>Kullanmaya Devam Et</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Resolution selection row */}
-          <View style={styles.resolutionSection}>
-            <Text style={styles.resolutionSectionTitle}>Kamera Çözünürlüğü</Text>
-            <View style={styles.resolutionRow}>
-              {Object.keys(resolutionOptions).map((resolution) => (
-                <TouchableOpacity
-                  key={resolution}
-                  style={[
-                    styles.resolutionButton,
-                    selectedResolution === resolution && styles.resolutionButtonSelected,
-                  ]}
-                  onPress={() => changeResolution(resolution)}
-                >
-                  <Text style={[
-                    styles.resolutionButtonText,
-                    selectedResolution === resolution && styles.resolutionButtonTextSelected,
-                  ]}>
-                    {resolution === "phone" ? "Telefon" : resolution.toUpperCase()}
-                  </Text>
-                  {selectedResolution === resolution && (
-                    <Ionicons name="checkmark" size={14} color={COLORS.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Filter information section */}
-          <View style={styles.filterInfoSection}>
-            <Text style={styles.filterInfoSectionTitle}>Filtre Bilgileri</Text>
-            <View style={styles.filterInfoCard}>
-              <View style={styles.filterInfoRow}>
-                <View style={styles.filterInfoItem}>
-                  <Text style={styles.filterInfoLabel}>Uygulama Tipi</Text>
-                  <Text style={styles.filterInfoValue}>
-                    {selectedProduct?.filterType === "Color"
-                      ? "Normal"
-                      : selectedProduct?.filterType === "Overlay"
-                      ? "Yoğun"
-                      : "İnce"}
-                  </Text>
-                </View>
-                <View style={styles.filterInfoItem}>
-                  <Text style={styles.filterInfoLabel}>Yoğunluk</Text>
-                  <Text style={styles.filterInfoValue}>
-                    {selectedProduct?.intensity || 1.0}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.filterInfoRow}>
-                <View style={[styles.filterInfoItem,{backgroundColor: selectedProduct?.filterColor}]}>
-                  <Text style={styles.filterInfoLabel}>Filtre Rengi</Text>
-                  <Text style={styles.filterInfoValue}>
-                    {selectedProduct?.filterColor || "Bronz"}
-                  </Text>
-                </View>
-                <View style={styles.filterInfoItem}>
-                  <Text style={styles.filterInfoLabel}>Görünüm</Text>
-                  <Text style={styles.filterInfoValue}>
-                    {selectedProduct?.name}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.filterInfoDescription}>
-                <Ionicons name="information-circle" size={14} color={COLORS.text} />
-                <Text style={styles.filterInfoDescriptionText}>
-                  Gerçek zamanlı yüz algılama ile uygulanan bronzlaştırma filtresi
+          <ScrollView style={{ flex: 1 }}>
+            <View style={styles.productInfoHeader}>
+              <Image
+                source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
+                style={styles.productInfoImage}
+              />
+              <View style={styles.productInfoContent}>
+                <Text style={styles.productInfoTitle}>
+                  {selectedProduct.name}
+                </Text>
+                <Text style={styles.productInfoPrice}>
+                  ₺{selectedProduct.price.toFixed(2)}
                 </Text>
               </View>
+              <TouchableOpacity
+                style={styles.closeInfoButton}
+                onPress={() => setShowHelp(false)}
+              >
+                <Ionicons name="close" size={20} color={COLORS.text} />
+              </TouchableOpacity>
             </View>
-          </View>
-        </ScrollView>
+
+            <Text style={styles.productInfoDescription}>
+              {selectedProduct.description}
+            </Text>
+
+            <View style={styles.productInfoActions}>
+              <TouchableOpacity
+                style={styles.infoActionButton}
+                onPress={() => Linking.openURL(selectedProduct.link)}
+              >
+                <Text style={styles.infoActionText}>Sitede Keşfet</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.productInfoActions}>
+              <TouchableOpacity
+                style={styles.infoActionButton}
+                onPress={() => setShowHelp(false)}
+              >
+                <Text style={styles.infoActionText}>Kullanmaya Devam Et</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Resolution selection row */}
+            <View style={styles.resolutionSection}>
+              <Text style={styles.resolutionSectionTitle}>
+                Kamera Çözünürlüğü
+              </Text>
+              <View style={styles.resolutionRow}>
+                {Object.keys(resolutionOptions).map((resolution) => (
+                  <TouchableOpacity
+                    key={resolution}
+                    style={[
+                      styles.resolutionButton,
+                      selectedResolution === resolution &&
+                        styles.resolutionButtonSelected,
+                    ]}
+                    onPress={() => changeResolution(resolution)}
+                  >
+                    <Text
+                      style={[
+                        styles.resolutionButtonText,
+                        selectedResolution === resolution &&
+                          styles.resolutionButtonTextSelected,
+                      ]}
+                    >
+                      {resolution === "phone"
+                        ? "Telefon"
+                        : resolution.toUpperCase()}
+                    </Text>
+                    {selectedResolution === resolution && (
+                      <Ionicons
+                        name="checkmark"
+                        size={14}
+                        color={COLORS.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Filter information section */}
+            <View style={styles.filterInfoSection}>
+              <Text style={styles.filterInfoSectionTitle}>
+                Filtre Bilgileri
+              </Text>
+              <View style={styles.filterInfoCard}>
+                <View style={styles.filterInfoRow}>
+                  <View style={styles.filterInfoItem}>
+                    <Text style={styles.filterInfoLabel}>Uygulama Tipi</Text>
+                    <Text style={styles.filterInfoValue}>
+                      {selectedProduct?.filterType === "Color"
+                        ? "Normal"
+                        : selectedProduct?.filterType === "Overlay"
+                        ? "Yoğun"
+                        : "İnce"}
+                    </Text>
+                  </View>
+                  <View style={styles.filterInfoItem}>
+                    <Text style={styles.filterInfoLabel}>Yoğunluk</Text>
+                    <Text style={styles.filterInfoValue}>
+                      {selectedProduct?.intensity || 1.0}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.filterInfoRow}>
+                  <View
+                    style={[
+                      styles.filterInfoItem,
+                      { backgroundColor: selectedProduct?.filterColor },
+                    ]}
+                  >
+                    <Text style={styles.filterInfoLabel}>Filtre Rengi</Text>
+                    <Text style={styles.filterInfoValue}>
+                      {selectedProduct?.filterColor || "Bronz"}
+                    </Text>
+                  </View>
+                  <View style={styles.filterInfoItem}>
+                    <Text style={styles.filterInfoLabel}>Görünüm</Text>
+                    <Text style={styles.filterInfoValue}>
+                      {selectedProduct?.name}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.filterInfoDescription}>
+                  <Ionicons
+                    name="information-circle"
+                    size={14}
+                    color={COLORS.text}
+                  />
+                  <Text style={styles.filterInfoDescriptionText}>
+                    Gerçek zamanlı yüz algılama ile uygulanan bronzlaştırma
+                    filtresi
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
         </Animated.View>
       )}
 
@@ -1609,9 +1632,7 @@ function RealTimeScreen() {
       {isProcessingPhoto && (
         <View style={styles.processingOverlay}>
           <View style={styles.processingContent}>
-            <Text style={styles.processingText}>
-              📸 Fotoğraf alınıyor...
-            </Text>
+            <Text style={styles.processingText}>📸 Fotoğraf alınıyor...</Text>
           </View>
         </View>
       )}
@@ -1738,11 +1759,7 @@ function RealTimeScreen() {
         >
           <Ionicons name="camera-reverse" size={24} color={COLORS.text} />
         </TouchableOpacity>
-
-
       </View>
-
-
     </View>
   );
 }
@@ -2453,7 +2470,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-
   sliderContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -2533,9 +2549,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.button,
     color: COLORS.background,
   },
-
-
-
 });
 
 export default RealTimeScreen;
