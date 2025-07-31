@@ -499,7 +499,7 @@ function RealTimeScreen() {
           width: width,
           height: height,
           isFiltered: true, // Zaten gerçek zamanlı filtre dahil
-          captureMethod: "clean_camera",
+          captureMethod: "realtime_capture",
           timestamp: new Date().toISOString(),
         };
 
@@ -1145,12 +1145,11 @@ function RealTimeScreen() {
           )}
 
           {/* ✅ Minimal overlay sadece görsel zenginlik için */}
-          {filteredPhoto && filteredPhoto.captureMethod === "clean_camera" && (
+          {filteredPhoto && filteredPhoto.captureMethod === "realtime_capture" && (
             <View
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: "rgba(255, 215, 0, 0.05)", // Minimal golden overlay
                   pointerEvents: "none",
                 },
               ]}
@@ -1189,7 +1188,7 @@ function RealTimeScreen() {
                       📤 Fotoğraf yükleniyor...
                     </Text>
                     <Text style={styles.processingSubText}>
-                      Backend'e gönderiliyor
+                      Uygulamaya gönderiliyor
                     </Text>
                   </>
                 )}
@@ -1411,7 +1410,7 @@ function RealTimeScreen() {
         style={StyleSheet.absoluteFill}
         options={{
           format: "jpg",
-          quality: 0.9,
+          quality: 1,
         }}
       >
         {hasPermission && cameraDevice ? (
