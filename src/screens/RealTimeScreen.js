@@ -1277,17 +1277,12 @@ function RealTimeScreen() {
                   <Text style={styles.productBadgeTitle}>
                     {selectedProduct.name}
                   </Text>
-                  <Text style={styles.productBadgeSubtitle}>
-                    {filteredPhoto?.captureMethod === "clean_camera"
-                      ? "📸 Temiz Kamera Capture"
-                      : "Bronzlaştırma Filtresi"}
-                  </Text>
                 </View>
               </View>
             </View>
 
             {/* Filter status indicator */}
-            {filteredPhoto &&
+            {/* {filteredPhoto &&
               filteredPhoto.captureMethod === "clean_camera" && (
                 <View style={styles.filterStatusBadge}>
                   <Ionicons name="camera" size={16} color="#4CAF50" />
@@ -1295,7 +1290,7 @@ function RealTimeScreen() {
                     Temiz Kamera Capture ✨
                   </Text>
                 </View>
-              )}
+              )} */}
 
             {/* Action buttons */}
             <View style={styles.previewActions}>
@@ -1615,7 +1610,7 @@ function RealTimeScreen() {
         <View style={styles.processingOverlay}>
           <View style={styles.processingContent}>
             <Text style={styles.processingText}>
-              📸 Temiz fotoğraf alınıyor...
+              📸 Fotoğraf alınıyor...
             </Text>
           </View>
         </View>
