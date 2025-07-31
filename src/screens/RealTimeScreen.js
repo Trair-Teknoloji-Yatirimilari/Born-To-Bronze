@@ -22,7 +22,8 @@ import {
   useCameraDevice,
   useCameraFormat,
   useCameraPermission,
-  useSkiaFrameProcessor
+  useSkiaFrameProcessor,
+  runAtTargetFps
 } from "react-native-vision-camera";
 import { useIsFocused } from "@react-navigation/core";
 import { useAppState } from "@react-native-community/hooks";
@@ -120,10 +121,15 @@ function RealTimeScreen() {
   const { width, height } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraFacing, setCameraFacing] = useState("front");
-  // const format = useCameraFormat(cameraDevice, [
-  //   { videoResolution: Dimensions.get("window") },
-  //   { fps: 30 },
-  // ]);
+  const cameraDevice = useCameraDevice(cameraFacing);
+  const format = useCameraFormat(cameraDevice, [
+    {
+      videoResolution: Dimensions.get('window'),
+    },
+    {
+      fps: 30,
+    },
+  ]);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [filteredPhoto, setFilteredPhoto] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -152,7 +158,6 @@ function RealTimeScreen() {
   const isFocused = useIsFocused();
   const appState = useAppState();
   const isCameraActive = isFocused && appState === "active";
-  const cameraDevice = useCameraDevice(cameraFacing);
 
   const camera = useRef(null);
   const viewShotRef = useRef(null);
@@ -277,23 +282,16 @@ function RealTimeScreen() {
     }
   }, [isProcessingPhoto, isUploading, isSharing]);
 
-  function handleUiRotation(rotation) {}
 
-  function handleCameraMountError(error) {
-    console.error("camera mount error", error);
-  }
-
-  function handleFacesDetected(faces, frame) {
-    if (faces.length <= 0) return;
-  }
 
   const { detectFaces } = useFaceDetector({
     performanceMode: "fast",
     classificationMode: "none", // Sadece yüz algılama
     contourMode: "all",
-    landmarkMode: "none", // Landmark'ları kapat
+    landmarkMode: "none", 
     windowWidth: width,
     windowHeight: height,
+    fps: 30,
   });
 
   const NECESSARY_CONTOURS = ["FACE", "LEFT_CHEEK", "RIGHT_CHEEK"];
@@ -1399,13 +1397,13 @@ function RealTimeScreen() {
               style={StyleSheet.absoluteFill}
               isActive={isCameraActive}
               device={cameraDevice}
-              onError={handleCameraMountError}
-              faceDetectionCallback={handleFacesDetected}
-              onUIRotationChanged={handleUiRotation}
               frameProcessor={frameProcessor}
-              // format={format}
+              format={format}
               photo={true}
               exposure={0}
+              // pixelFormat="rgb"
+              // fps={format.maxFps}
+              fps={30}
             />
           </Animated.View>
         ) : (
@@ -1680,9 +1678,9 @@ function RealTimeScreen() {
               </View>
               <View style={styles.filterSettingHeader}>
                 <View style={styles.filterInfoContainer}>
-                  <Text style={styles.filterInfoLabel}>Filtre Tipi:</Text>
+                  <Text style={styles.filterInfoLabel}>Uygulama Tipi:</Text>
                   <Text style={styles.filterInfoValue}>
-                    {selectedProduct?.filterType || "Color"}
+                    {selectedProduct?.filterType == "Color" ? "Normal" : selectedProduct?.filterType == "Overlay" ? "Yoğun" : "İnce"}
                   </Text>
                 </View>
                 <View style={styles.filterInfoContainer}>
