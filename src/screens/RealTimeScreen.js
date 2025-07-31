@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Modal,
   Dimensions,
+  ScrollView
 } from "react-native";
 import {
   Camera,
@@ -23,7 +24,7 @@ import {
   useCameraFormat,
   useCameraPermission,
   useSkiaFrameProcessor,
-  runAtTargetFps
+  runAtTargetFps,
 } from "react-native-vision-camera";
 import { useIsFocused } from "@react-navigation/core";
 import { useAppState } from "@react-native-community/hooks";
@@ -122,9 +123,20 @@ function RealTimeScreen() {
   const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraFacing, setCameraFacing] = useState("front");
   const cameraDevice = useCameraDevice(cameraFacing);
+  
+  // Çözünürlük seçenekleri ve state
+  const [selectedResolution, setSelectedResolution] = useState("phone");
+  
+  const resolutionOptions = {
+    "480p": { width: 640, height: 480 },
+    "720p": { width: 1280, height: 720 },
+    "1080p": { width: 1920, height: 1080 },
+    "phone": Dimensions.get("window"),
+  };
+  
   const format = useCameraFormat(cameraDevice, [
     {
-      videoResolution: Dimensions.get('window'),
+      videoResolution: resolutionOptions[selectedResolution],
     },
     {
       fps: 30,
@@ -165,7 +177,7 @@ function RealTimeScreen() {
   const [PRODUCTS, setPRODUCTS] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isProductsLoading, setIsProductsLoading] = useState(true); // <-- Loading state
-  const [showFilterSettings, setShowFilterSettings] = useState(false); // Filtre ayarları paneli gösterimi
+
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -176,7 +188,7 @@ function RealTimeScreen() {
         setPRODUCTS(data.products);
         setSelectedProduct(data.products[1]);
         if (data.products.length > 0) {
-          setIsProductsLoading(false); 
+          setIsProductsLoading(false);
         }
       } catch (e) {
         console.error("Ürünler yüklenirken hata:", e);
@@ -191,26 +203,26 @@ function RealTimeScreen() {
   }, [hasPermission]);
 
   // Pulse animasyonu - sadece kamera aktifken çalışsın
-  useEffect(() => {
-    if (!isCameraActive) return;
-    
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [isCameraActive]);
+  // useEffect(() => {
+  //   if (!isCameraActive) return;
+
+  //   const pulse = Animated.loop(
+  //     Animated.sequence([
+  //       Animated.timing(pulseAnim, {
+  //         toValue: 1.1,
+  //         duration: 1000,
+  //         useNativeDriver: true,
+  //       }),
+  //       Animated.timing(pulseAnim, {
+  //         toValue: 1,
+  //         duration: 1000,
+  //         useNativeDriver: true,
+  //       }),
+  //     ])
+  //   );
+  //   pulse.start();
+  //   return () => pulse.stop();
+  // }, [isCameraActive]);
 
   // Yardım ipucunu otomatik gizle
   // useEffect(() => {
@@ -223,7 +235,7 @@ function RealTimeScreen() {
   // Preview ekranında hint'i otomatik gizle
   useEffect(() => {
     if (capturedPhoto && showHint) {
-      const timer = setTimeout(() => setShowHint(false), 4000);
+      const timer = setTimeout(() => setShowHint(false), 1000);
       return () => clearTimeout(timer);
     }
   }, [capturedPhoto, showHint]);
@@ -232,7 +244,8 @@ function RealTimeScreen() {
   useEffect(() => {
     if (isProcessingPhoto || isUploading || isSharing) {
       const animateDotsSequence = () => {
-        const sequence = Animated.stagger(200, [ // Daha yavaş animasyon
+        const sequence = Animated.stagger(200, [
+          // Daha yavaş animasyon
           Animated.timing(dot1Anim, {
             toValue: 1,
             duration: 500,
@@ -282,13 +295,11 @@ function RealTimeScreen() {
     }
   }, [isProcessingPhoto, isUploading, isSharing]);
 
-
-
   const { detectFaces } = useFaceDetector({
     performanceMode: "fast",
     classificationMode: "none", // Sadece yüz algılama
     contourMode: "all",
-    landmarkMode: "none", 
+    landmarkMode: "none",
     windowWidth: width,
     windowHeight: height,
     fps: 30,
@@ -319,31 +330,31 @@ function RealTimeScreen() {
     // Bu matris, orijinal renkleri koruyarak bronz tonunu daha doğal şekilde uygular
     const colorMatrix = [
       // Kırmızı kanal - bronz tonunu daha doğal şekilde uygula
-      0.8 + 0.2 * intensity,  // Temel kırmızı kanalı koru
-      0.1 * intensity,         // Yeşilden kırmızıya hafif geçiş
-      0.1 * intensity,         // Maviden kırmızıya hafif geçiş
+      0.8 + 0.2 * intensity, // Temel kırmızı kanalı koru
+      0.1 * intensity, // Yeşilden kırmızıya hafif geçiş
+      0.1 * intensity, // Maviden kırmızıya hafif geçiş
       0,
-      r * (0.3 * intensity),   // Bronz renginin kırmızı bileşeni
-      
+      r * (0.3 * intensity), // Bronz renginin kırmızı bileşeni
+
       // Yeşil kanal - doğal bronz tonu için
-      0.05 * intensity,        // Kırmızıdan yeşile hafif geçiş
+      0.05 * intensity, // Kırmızıdan yeşile hafif geçiş
       0.85 + 0.15 * intensity, // Temel yeşil kanalı koru
-      0.05 * intensity,        // Maviden yeşile hafif geçiş
+      0.05 * intensity, // Maviden yeşile hafif geçiş
       0,
-      g * (0.25 * intensity),  // Bronz renginin yeşil bileşeni
-      
+      g * (0.25 * intensity), // Bronz renginin yeşil bileşeni
+
       // Mavi kanal - bronz efektini dengele
-      0.05 * intensity,        // Kırmızıdan maviye hafif geçiş
-      0.05 * intensity,        // Yeşilden maviye hafif geçiş
-      0.7 + 0.3 * intensity,  // Temel mavi kanalı koru
+      0.05 * intensity, // Kırmızıdan maviye hafif geçiş
+      0.05 * intensity, // Yeşilden maviye hafif geçiş
+      0.7 + 0.3 * intensity, // Temel mavi kanalı koru
       0,
-      b * (0.2 * intensity),   // Bronz renginin mavi bileşeni
-      
+      b * (0.2 * intensity), // Bronz renginin mavi bileşeni
+
       // Alpha kanal - şeffaflık kontrolü
       0,
       0,
       0,
-      0.85 * intensity,        // Daha doğal şeffaflık
+      0.85 * intensity, // Daha doğal şeffaflık
       0,
     ];
 
@@ -352,10 +363,16 @@ function RealTimeScreen() {
     // Ürün verisinden gelen filterType, yoksa varsayılan "Color"
     const filterType = selectedProduct?.filterType || "Color";
     paint.setBlendMode(BlendMode[filterType]);
-    paint.setImageFilter(Skia.ImageFilter.MakeBlur(1.5, 1.5, TileMode.Clamp, null));
+    paint.setImageFilter(
+      Skia.ImageFilter.MakeBlur(1.5, 1.5, TileMode.Clamp, null)
+    );
 
     return paint;
-  }, [selectedProduct?.filterColor, selectedProduct?.intensity, selectedProduct?.filterType]);
+  }, [
+    selectedProduct?.filterColor,
+    selectedProduct?.intensity,
+    selectedProduct?.filterType,
+  ]);
 
   // Cache'lenmiş path'ler için ref'ler
   const facePathRef = useRef(null);
@@ -365,13 +382,24 @@ function RealTimeScreen() {
   const frameProcessor = useSkiaFrameProcessor(
     (frame) => {
       "worklet";
+
+      // Her durumda frame'i render et - kamera görüntüsünü göster
       frame.render();
 
+      // Eğer bronzePaint yoksa sadece normal kamera görüntüsünü göster
+      if (!bronzePaint) {
+        return;
+      }
+
       const faces = detectFaces(frame);
-      if (!faces.length || !bronzePaint) return;
+      if (!faces.length) {
+        return;
+      }
 
       const { contours } = faces[0];
-      if (!contours) return;
+      if (!contours) {
+        return;
+      }
 
       // Contours değişmediyse cache'lenmiş path'leri kullan
       const contoursKey = JSON.stringify(contours);
@@ -395,8 +423,10 @@ function RealTimeScreen() {
       const allPoints = NECESSARY_CONTOURS.flatMap(
         (key) => contours[key] || []
       );
-      
-      if (allPoints.length === 0) return;
+
+      if (allPoints.length === 0) {
+        return;
+      }
 
       const maxX = Math.max(...allPoints.map((p) => p.x));
       const scaleX = 1.1;
@@ -440,16 +470,13 @@ function RealTimeScreen() {
       facePathRef.current = facePath;
       excludePathRef.current = excludePath;
 
-      // 4. Çizim
+      // 4. Çizim - bronz efekti uygula
       frame.save();
       frame.clipPath(facePath, ClipOp.Intersect, true);
       if (excludePath.countPoints() > 0) {
         frame.clipPath(excludePath, ClipOp.Difference, true);
       }
-
-      // Sadece ana bronzlaştırma katmanı
       frame.render(bronzePaint);
-
       frame.restore();
     },
     [bronzePaint]
@@ -875,6 +902,11 @@ function RealTimeScreen() {
     setShowHelp(false);
   };
 
+  // Çözünürlük değiştirme fonksiyonu
+  const changeResolution = (newResolution) => {
+    setSelectedResolution(newResolution);
+  };
+
   // Swipe gesture tanımla
   const swipeGesture = Gesture.Pan().onEnd((event) => {
     "worklet";
@@ -997,9 +1029,9 @@ function RealTimeScreen() {
           useNativeDriver: true,
         })
       );
-      
+
       animation.start();
-      
+
       return () => {
         animation.stop();
       };
@@ -1032,7 +1064,7 @@ function RealTimeScreen() {
   const LoadingPlaceholder = () => (
     <View style={StyleSheet.absoluteFill}>
       <StatusBar barStyle="light-content" backgroundColor="black" />
-      
+
       {/* Camera view placeholder */}
       <View style={StyleSheet.absoluteFill}>
         <Shimmer style={StyleSheet.absoluteFill} />
@@ -1082,7 +1114,7 @@ function RealTimeScreen() {
 
       {/* Swipe indicator */}
       <View style={styles.swipeIndicator}>
-        <Shimmer style={{ height: 14, width: 100, alignSelf: 'center', }} />
+        <Shimmer style={{ height: 14, width: 100, alignSelf: "center" }} />
       </View>
     </View>
   );
@@ -1399,10 +1431,8 @@ function RealTimeScreen() {
               device={cameraDevice}
               frameProcessor={frameProcessor}
               format={format}
-              photo={true}
               exposure={0}
-              // pixelFormat="rgb"
-              // fps={format.maxFps}
+              pixelFormat="rgb"
               fps={30}
             />
           </Animated.View>
@@ -1458,9 +1488,10 @@ function RealTimeScreen() {
 
       {/* Product info overlay */}
       {showHelp && (
-        <Animated.View
+          <Animated.View
           style={[styles.productInfoOverlay, { opacity: fadeAnim }]}
         >
+        <ScrollView style={{flex: 1}}>
           <View style={styles.productInfoHeader}>
             <Image
               source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
@@ -1503,6 +1534,79 @@ function RealTimeScreen() {
               <Text style={styles.infoActionText}>Kullanmaya Devam Et</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Resolution selection row */}
+          <View style={styles.resolutionSection}>
+            <Text style={styles.resolutionSectionTitle}>Kamera Çözünürlüğü</Text>
+            <View style={styles.resolutionRow}>
+              {Object.keys(resolutionOptions).map((resolution) => (
+                <TouchableOpacity
+                  key={resolution}
+                  style={[
+                    styles.resolutionButton,
+                    selectedResolution === resolution && styles.resolutionButtonSelected,
+                  ]}
+                  onPress={() => changeResolution(resolution)}
+                >
+                  <Text style={[
+                    styles.resolutionButtonText,
+                    selectedResolution === resolution && styles.resolutionButtonTextSelected,
+                  ]}>
+                    {resolution === "phone" ? "Telefon" : resolution.toUpperCase()}
+                  </Text>
+                  {selectedResolution === resolution && (
+                    <Ionicons name="checkmark" size={14} color={COLORS.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Filter information section */}
+          <View style={styles.filterInfoSection}>
+            <Text style={styles.filterInfoSectionTitle}>Filtre Bilgileri</Text>
+            <View style={styles.filterInfoCard}>
+              <View style={styles.filterInfoRow}>
+                <View style={styles.filterInfoItem}>
+                  <Text style={styles.filterInfoLabel}>Uygulama Tipi</Text>
+                  <Text style={styles.filterInfoValue}>
+                    {selectedProduct?.filterType === "Color"
+                      ? "Normal"
+                      : selectedProduct?.filterType === "Overlay"
+                      ? "Yoğun"
+                      : "İnce"}
+                  </Text>
+                </View>
+                <View style={styles.filterInfoItem}>
+                  <Text style={styles.filterInfoLabel}>Yoğunluk</Text>
+                  <Text style={styles.filterInfoValue}>
+                    {selectedProduct?.intensity || 1.0}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.filterInfoRow}>
+                <View style={[styles.filterInfoItem,{backgroundColor: selectedProduct?.filterColor}]}>
+                  <Text style={styles.filterInfoLabel}>Filtre Rengi</Text>
+                  <Text style={styles.filterInfoValue}>
+                    {selectedProduct?.filterColor || "Bronz"}
+                  </Text>
+                </View>
+                <View style={styles.filterInfoItem}>
+                  <Text style={styles.filterInfoLabel}>Görünüm</Text>
+                  <Text style={styles.filterInfoValue}>
+                    {selectedProduct?.name}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.filterInfoDescription}>
+                <Ionicons name="information-circle" size={14} color={COLORS.text} />
+                <Text style={styles.filterInfoDescriptionText}>
+                  Gerçek zamanlı yüz algılama ile uygulanan bronzlaştırma filtresi
+                </Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
         </Animated.View>
       )}
 
@@ -1640,66 +1744,10 @@ function RealTimeScreen() {
           <Ionicons name="camera-reverse" size={24} color={COLORS.text} />
         </TouchableOpacity>
 
-        {/* Filtre bilgileri butonu */}
-        <TouchableOpacity
-          onPress={() => setShowFilterSettings(!showFilterSettings)}
-          style={[styles.sideButton, { marginTop: 15 }]}
-        >
-          <Ionicons name="information-circle" size={24} color={COLORS.text} />
-        </TouchableOpacity>
+
       </View>
 
-      {/* Filtre ayarları paneli */}
-      {showFilterSettings && (
-        <Animated.View
-          style={[styles.filterSettingsPanel, { opacity: fadeAnim }]}
-        >
-          <View style={styles.filterSettingsContainer}>
-            <View style={styles.filterSettingsHeader}>
-              <Text style={styles.filterSettingsTitle}>ℹ️ Filtre Bilgileri</Text>
-              <TouchableOpacity
-                onPress={() => setShowFilterSettings(false)}
-                style={styles.closeSettingsButton}
-              >
-                <Ionicons name="close" size={24} color={COLORS.active} />
-              </TouchableOpacity>
-            </View>
 
-
-
-            <View style={styles.filterSettingItem}>
-              <View style={styles.filterSettingHeader}>
-                <Ionicons
-                  name="information-circle"
-                  size={20}
-                  color={COLORS.background}
-                />
-                <Text style={styles.filterSettingLabel}>Filtre Bilgisi</Text>
-              </View>
-              <View style={styles.filterSettingHeader}>
-                <View style={styles.filterInfoContainer}>
-                  <Text style={styles.filterInfoLabel}>Uygulama Tipi:</Text>
-                  <Text style={styles.filterInfoValue}>
-                    {selectedProduct?.filterType == "Color" ? "Normal" : selectedProduct?.filterType == "Overlay" ? "Yoğun" : "İnce"}
-                  </Text>
-                </View>
-                <View style={styles.filterInfoContainer}>
-                  <Text style={styles.filterInfoLabel}>Yoğunluk:</Text>
-                  <Text style={styles.filterInfoValue}>
-                    {selectedProduct?.intensity || 1.0}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.filterInfoText}>
-                {selectedProduct?.name} - {selectedProduct?.filterColor}
-              </Text>
-              <Text style={styles.filterInfoSubtext}>
-                Gerçek zamanlı yüz algılama ile uygulanan bronzlaştırma filtresi
-              </Text>
-            </View>
-          </View>
-        </Animated.View>
-      )}
     </View>
   );
 }
@@ -1787,6 +1835,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 10,
+    maxHeight: Dimensions.get("window").height - 200,
   },
   productInfoHeader: {
     flexDirection: "row",
@@ -1860,6 +1909,116 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
+  },
+
+  // Resolution Section Styles
+  resolutionSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.1)",
+  },
+  resolutionSectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  resolutionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  resolutionButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.2)",
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 4,
+  },
+  resolutionButtonSelected: {
+    backgroundColor: COLORS.active,
+    borderColor: COLORS.active,
+  },
+  resolutionButtonText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: COLORS.text,
+  },
+  resolutionButtonTextSelected: {
+    color: "#fff",
+  },
+
+  // Filter Information Section Styles
+  filterInfoSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.1)",
+  },
+  filterInfoSectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  filterInfoCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.1)",
+  },
+  filterInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  filterInfoItem: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.button,
+    borderRadius: 8,
+    marginHorizontal: 4,
+  },
+  filterInfoLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: COLORS.text,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  filterInfoValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginTop: 2,
+    textAlign: "center",
+  },
+  filterInfoDescription: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.1)",
+    gap: 6,
+  },
+  filterInfoDescriptionText: {
+    fontSize: 11,
+    color: COLORS.text,
+    opacity: 0.7,
+    textAlign: "center",
+    flex: 1,
   },
 
   // Bottom Container
@@ -2299,80 +2458,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Filter Settings Panel Styles
-  filterSettingsPanel: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 25,
-  },
-  filterSettingsContainer: {
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    padding: 20,
-    width: "90%",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 15,
-  },
-  filterSettingsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 20,
-  },
-  filterSettingsTitle: {
-    color: COLORS.text,
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  closeSettingsButton: {
-    padding: 5,
-  },
-  filterSettingItem: {
-    marginBottom: 20,
-    width: "100%",
-  },
-  filterSettingHeader: {
-    flexDirection: "row",
-    alignItems: "start",
-    justifyContent: "center",
-    marginBottom: 10,
-    gap:10
-  },
-  filterSettingLabel: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  filterSettingValue: {
-    color: "#FF6B35",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  filterInfoText: {
-    color: COLORS.text,
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 10,
-    opacity: 0.8,
-  },
-  filterInfoSubtext: {
-    color: COLORS.text,
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 4,
-    opacity: 0.6,
-  },
+
   sliderContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -2440,36 +2526,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minWidth: 70,
     alignItems: "center",
-    gap:2
+    gap: 2,
   },
 
   filterModeText: {
     color: COLORS.text,
     fontSize: 11,
     fontWeight: "600",
-    textAlign: "center",
   },
   activeFilterMode: {
     backgroundColor: COLORS.button,
     color: COLORS.background,
   },
-  filterInfoContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    paddingHorizontal: 10,
-  },
-  filterInfoLabel: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  filterInfoValue: {
-    color: "#FF6B35",
-    fontSize: 14,
-    fontWeight: "700",
-  },
+
 
 
 });
