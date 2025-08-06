@@ -144,7 +144,7 @@ const WelcomeScreen = () => {
             source={require("../assets/logo.png")}
             style={styles.welcomeLogo}
           />
-          <View style={styles.buttonContainer}>
+          {/* <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={styles.button}
               onPress={() => navigation.navigate("Gerçek Zamanlı Önizleme")}
@@ -166,7 +166,7 @@ const WelcomeScreen = () => {
             <Text style={styles.subtitle}>
               istediğiniz alanları seçerek bronzlaştırıcı kremler uygulayabilirsiniz.
             </Text>
-          </View>
+          </View> */}
         </View>
       </LinearGradient>
     </ImageBackground>
@@ -218,8 +218,8 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   welcomeLogo: {
-    width: 150,
-    height: 150,
+    width: 200,
+    height: 200,
     marginBottom: 30,
     backgroundColor: COLORS.background,
     borderRadius: 100,

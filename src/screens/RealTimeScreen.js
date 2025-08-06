@@ -130,7 +130,6 @@ function RealTimeScreen() {
   const resolutionOptions = {
     "480p": { width: 640, height: 480 },
     "720p": { width: 1280, height: 720 },
-    "1080p": { width: 1920, height: 1080 },
     phone: Dimensions.get("window"),
   };
 
@@ -428,7 +427,7 @@ function RealTimeScreen() {
       }
 
       const maxX = Math.max(...allPoints.map((p) => p.x));
-      const scaleX = 1.1;
+      const scaleX = 1.05;
 
       // 1. Genişletilmiş kontur
       NECESSARY_CONTOURS.forEach((key) => {
