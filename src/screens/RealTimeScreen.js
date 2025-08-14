@@ -427,14 +427,63 @@ function RealTimeScreen() {
       }
 
       const maxX = Math.max(...allPoints.map((p) => p.x));
-      const scaleX = 1.05;
+      const maxY = Math.max(...allPoints.map((p) => p.y));
+      const minY = Math.min(...allPoints.map((p) => p.y));
+      const faceSpanY = Math.max(1, maxY - minY);
+      const minX = Math.min(...allPoints.map((p) => p.x));
+      const faceSpanX = Math.max(1, Math.max(...allPoints.map((p) => p.x)) - minX);
 
-      // 1. Genişletilmiş kontur
+      // Kaş referansı: alın yüksekliğini ölçmek için
+      const leftBrowTop = contours["LEFT_EYEBROW_TOP"] || [];
+      const rightBrowTop = contours["RIGHT_EYEBROW_TOP"] || [];
+      const browPoints = [...leftBrowTop, ...rightBrowTop];
+      let avgBrowY = null;
+      if (browPoints.length > 0) {
+        avgBrowY = browPoints.reduce((s, p) => s + p.y, 0) / browPoints.length;
+      } else {
+        const leftEye = contours["LEFT_EYE"] || [];
+        const rightEye = contours["RIGHT_EYE"] || [];
+        const eyePoints = [...leftEye, ...rightEye];
+        if (eyePoints.length > 0) {
+          avgBrowY = eyePoints.reduce((s, p) => s + p.y, 0) / eyePoints.length;
+        }
+      }
+
+      // Yüzün ekranda kapladığı oran (hem yükseklik hem genişlikten)
+      const faceSizeRatioY = Math.max(0, Math.min(1, faceSpanY / height));
+      const faceSizeRatioXOnScreen = Math.max(0, Math.min(1, faceSpanX / width));
+      const combinedSize = 0.6 * faceSizeRatioY + 0.4 * faceSizeRatioXOnScreen;
+      const sizeNorm = Math.max(0, Math.min(1, (combinedSize - 0.12) / 0.38)); // ≈0.12..0.50 -> 0..1
+      // Yüz küçükse daha düşük, büyükse daha yüksek hedef alın oranı (X ekseninde)
+      const baseTarget = 0.23 + sizeNorm * 0.11; // 0.23..0.34
+      const smallBoost = 0.53; // çok az arttırma
+      const targetForeheadRatioX = baseTarget + smallBoost; // ≈0.245..0.355
+
+      // Alın için referans X: kaş (yoksa göz)
+      let avgBrowX = null;
+      if (browPoints.length > 0) {
+        avgBrowX = browPoints.reduce((s, p) => s + p.x, 0) / browPoints.length;
+      } else {
+        const leftEye = contours["LEFT_EYE"] || [];
+        const rightEye = contours["RIGHT_EYE"] || [];
+        const eyePoints = [...leftEye, ...rightEye];
+        if (eyePoints.length > 0) {
+          avgBrowX = eyePoints.reduce((s, p) => s + p.x, 0) / eyePoints.length;
+        }
+      }
+
+      const maxXForScale = Math.max(...allPoints.map((p) => p.x));
+      const currentForeheadSpanX = avgBrowX != null ? Math.abs(maxXForScale - avgBrowX) : 0.18 * faceSpanX;
+      const desiredForeheadSpanX = targetForeheadRatioX * faceSpanX;
+      const rawScaleX = desiredForeheadSpanX / Math.max(1, currentForeheadSpanX);
+      const scaleX = Math.max(1.03, Math.min(1.30, rawScaleX * 1.03)); // çok az ekstra artırma
+
+      // 1. Genişletilmiş kontur (X ekseninde alın yönüne doğru)
       NECESSARY_CONTOURS.forEach((key) => {
         const pts = contours[key];
         if (pts && pts.length > 0) {
           pts.forEach(({ x, y }, i) => {
-            const newX = maxX + (x - maxX) * scaleX;
+            const newX = maxXForScale + (x - maxXForScale) * scaleX;
             i ? facePath.lineTo(newX, y) : facePath.moveTo(newX, y);
           });
           facePath.close();
