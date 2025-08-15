@@ -22,7 +22,7 @@
         "NSPhotoLibraryUsageDescription": "Eda uygulamasının fotoğraflarınıza erişmesine izin verin",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "9" 
+      "buildNumber": "9"
     },
     "android": {
       "adaptiveIcon": {
@@ -56,6 +56,14 @@
         "react-native-vision-camera",
         {
           "cameraPermissionText": "Eda uygulamasının kameranıza erişmesine izin verin"
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "react-native",
+          "organization": "atakan-development"
         }
       ]
     ],
