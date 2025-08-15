@@ -692,11 +692,24 @@ function RealTimeScreen() {
     try {
       setIsUploading(true);
 
+      if (!photoUri) {
+        throw new Error("Fotoğraf URI'si boş");
+      }
+
       // Device bilgilerini al
       const deviceInfo = await getDeviceInfo();
+      if (!deviceInfo) {
+        throw new Error("Cihaz bilgileri alınamadı");
+      }
 
       // Fotoğraf dosyasını oku
-      const fileInfo = await FileSystem.getInfoAsync(photoUri);
+      let fileInfo;
+      try {
+        fileInfo = await FileSystem.getInfoAsync(photoUri);
+      } catch (fileError) {
+        throw new Error(`Dosya bilgisi alınamadı: ${fileError.message}`);
+      }
+
       if (!fileInfo.exists) {
         throw new Error("Fotoğraf dosyası bulunamadı");
       }
@@ -711,6 +724,10 @@ function RealTimeScreen() {
         !imageUri.startsWith("content://")
       ) {
         imageUri = `file://${photoUri}`;
+      }
+
+      if (!selectedProduct) {
+        throw new Error("Seçili ürün bulunamadı");
       }
 
       formData.append("image", {
@@ -731,16 +748,26 @@ function RealTimeScreen() {
         }
       );
 
-      const result = await response.json();
+      // Response status kontrolü
+      if (!response.ok) {
+        throw new Error(`Upload server hatası: ${response.status} ${response.statusText}`);
+      }
 
-      if (result.success) {
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        throw new Error("Upload yanıtı JSON formatında değil");
+      }
+
+      if (result && result.success) {
         return {
           imageId: result.imageId,
           imageUrl: result.imageUrl,
           success: true,
         };
       } else {
-        throw new Error(result.error || "Upload başarısız");
+        throw new Error(result?.error || "Upload başarısız");
       }
     } catch (error) {
       console.error("❌ Upload hatası:", error);
@@ -792,6 +819,11 @@ function RealTimeScreen() {
   async function performShare(imageId) {
     try {
       const deviceInfo = await getDeviceInfo();
+      
+      if (!deviceInfo || !deviceInfo.uniqueId) {
+        throw new Error("Cihaz bilgileri alınamadı");
+      }
+
       const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
         method: "POST",
         headers: {
@@ -803,11 +835,25 @@ function RealTimeScreen() {
         }),
       });
 
-      const result = await response.json();
+      // Response status kontrolü
+      if (!response.ok) {
+        throw new Error(`Server hatası: ${response.status} ${response.statusText}`);
+      }
 
-      if (result.success) {
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        throw new Error("Server yanıtı JSON formatında değil");
+      }
+
+      if (result && result.success) {
         // Başarı için haptic feedback
-        Vibration.vibrate([100, 50, 100]);
+        try {
+          Vibration.vibrate([100, 50, 100]);
+        } catch (vibrationError) {
+          console.warn("Vibration hatası:", vibrationError);
+        }
 
         Alert.alert(
           "Paylaşım Başarılı! 🎉",
@@ -823,9 +869,10 @@ function RealTimeScreen() {
           ]
         );
       } else {
-        throw new Error(result.error || "Paylaşım API'si hatası");
+        throw new Error(result?.error || "Paylaşım API'si hatası");
       }
     } catch (error) {
+      console.error("performShare hatası:", error);
       throw error;
     }
   }
@@ -1011,18 +1058,29 @@ function RealTimeScreen() {
       if (/^https?:\/\//.test(filteredPhoto.path)) {
         const fileName = `shared-photo-${Date.now()}.jpg`;
         const fileUri = FileSystem.cacheDirectory + fileName;
-        const downloadRes = await FileSystem.downloadAsync(
-          filteredPhoto.path,
-          fileUri
-        );
-        shareUrl = downloadRes.uri;
+        
+        try {
+          const downloadRes = await FileSystem.downloadAsync(
+            filteredPhoto.path,
+            fileUri
+          );
+          shareUrl = downloadRes.uri;
+        } catch (downloadError) {
+          console.error("Dosya indirme hatası:", downloadError);
+          Alert.alert("Hata", "Fotoğraf indirilemedi!");
+          return;
+        }
       }
+
       await Share.open({
         url: shareUrl,
         social: Share.Social.WHATSAPP,
         failOnCancel: false,
       });
-    } catch (e) {}
+    } catch (shareError) {
+      console.error("WhatsApp paylaşım hatası:", shareError);
+      Alert.alert("Paylaşım Hatası", "WhatsApp'ta paylaşım yapılamadı.");
+    }
   };
   const handleShareInstagram = async () => {
     setShareModalVisible(false);
@@ -1035,18 +1093,29 @@ function RealTimeScreen() {
       if (/^https?:\/\//.test(filteredPhoto.path)) {
         const fileName = `shared-photo-${Date.now()}.jpg`;
         const fileUri = FileSystem.cacheDirectory + fileName;
-        const downloadRes = await FileSystem.downloadAsync(
-          filteredPhoto.path,
-          fileUri
-        );
-        shareUrl = downloadRes.uri;
+        
+        try {
+          const downloadRes = await FileSystem.downloadAsync(
+            filteredPhoto.path,
+            fileUri
+          );
+          shareUrl = downloadRes.uri;
+        } catch (downloadError) {
+          console.error("Dosya indirme hatası:", downloadError);
+          Alert.alert("Hata", "Fotoğraf indirilemedi!");
+          return;
+        }
       }
+      
       await Share.open({
         url: shareUrl,
         social: Share.Social.INSTAGRAM,
         failOnCancel: false,
       });
-    } catch (e) {}
+    } catch (shareError) {
+      console.error("Instagram paylaşım hatası:", shareError);
+      Alert.alert("Paylaşım Hatası", "Instagram'da paylaşım yapılamadı.");
+    }
   };
   const handleShareOther = async () => {
     setShareModalVisible(false);
@@ -1056,25 +1125,42 @@ function RealTimeScreen() {
     }
     try {
       let shareUrl = filteredPhoto.path;
+      
       if (/^https?:\/\//.test(filteredPhoto.path)) {
         const fileName = `shared-photo-${Date.now()}.jpg`;
         const fileUri = FileSystem.cacheDirectory + fileName;
-        const downloadRes = await FileSystem.downloadAsync(
-          filteredPhoto.path,
-          fileUri
-        );
-        shareUrl = downloadRes.uri;
+        
+        try {
+          const downloadRes = await FileSystem.downloadAsync(
+            filteredPhoto.path,
+            fileUri
+          );
+          shareUrl = downloadRes.uri;
+        } catch (downloadError) {
+          console.error("Dosya indirme hatası:", downloadError);
+          Alert.alert("Hata", "Fotoğraf indirilemedi!");
+          return;
+        }
       }
+      
       // file:// ile başlamıyorsa ekle
       if (!shareUrl.startsWith("file://")) {
         shareUrl = "file://" + shareUrl;
       }
+      
       // Dosya gerçekten var mı kontrol et
-      const fileInfo = await FileSystem.getInfoAsync(shareUrl);
-      if (!fileInfo.exists) {
-        Alert.alert("Hata", "Paylaşılacak dosya bulunamadı veya erişilemiyor!");
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(shareUrl);
+        if (!fileInfo.exists) {
+          Alert.alert("Hata", "Paylaşılacak dosya bulunamadı veya erişilemiyor!");
+          return;
+        }
+      } catch (fileCheckError) {
+        console.error("Dosya kontrol hatası:", fileCheckError);
+        Alert.alert("Hata", "Dosya kontrol edilemedi!");
         return;
       }
+      
       await Share.open({
         url: shareUrl,
         type: "image/jpeg",
@@ -1082,10 +1168,11 @@ function RealTimeScreen() {
         message: "Bronzlaştırıcı krem ile oluşturduğum fotoğrafı paylaşıyorum!",
         failOnCancel: false,
       });
-    } catch (e) {
+    } catch (shareError) {
+      console.error("Genel paylaşım hatası:", shareError);
       Alert.alert(
         "Paylaşım Hatası",
-        "Paylaşım ekranı açılamadı veya bir hata oluştu."
+        `Paylaşım ekranı açılamadı: ${shareError.message || 'Bilinmeyen hata'}`
       );
     }
   };
@@ -1499,8 +1586,9 @@ function RealTimeScreen() {
               frameProcessor={frameProcessor}
               format={format}
               exposure={0}
-              pixelFormat="rgb"
+              pixelFormat={Platform.OS === 'ios' ? "rgb" : 'yuv'}
               fps={30}
+              photoQualityBalance="speed"
             />
           </Animated.View>
         ) : (
