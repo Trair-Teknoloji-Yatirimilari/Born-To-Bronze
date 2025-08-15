@@ -472,34 +472,60 @@ function RealTimeScreen() {
         }
       }
 
-      const maxXForScale = Math.max(...allPoints.map((p) => p.x));
-      const currentForeheadSpanX = avgBrowX != null ? Math.abs(maxXForScale - avgBrowX) : 0.18 * faceSpanX;
-      const desiredForeheadSpanX = targetForeheadRatioX * faceSpanX;
-      const rawScaleX = desiredForeheadSpanX / Math.max(1, currentForeheadSpanX);
-      const scaleX = Math.max(1.03, Math.min(1.30, rawScaleX * 1.03)); // çok az ekstra artırma
-
-      // 1. Genişletilmiş kontur (X ekseninde alın yönüne doğru)
+      // Alın genişletme için X ekseninde genişletme
+      // Yüz boyutuna göre X ekseninde genişletme miktarını hesapla - daha orantılı
+      const baseExtensionRatio = 0.05; // Temel genişletme oranı (%5)
+      const sizeAdjustment = sizeNorm * 0.03; // Yüz boyutuna göre ek ayarlama (%0-3)
+      const foreheadExtensionRatio = baseExtensionRatio + sizeAdjustment; // 0.05..0.08 arası
+      const foreheadExtensionX = foreheadExtensionRatio * faceSpanX;
+      
+      // Belirli contour indeksleri için X ekseninde genişletme
+      const foreheadContourIndices = [32,33, 34, 35, 36,0, 1, 2, 3,4];
+      
+      // 1. Yüz konturu oluştur - FACE contour'unda belirli noktaları X ekseninde genişlet
       NECESSARY_CONTOURS.forEach((key) => {
         const pts = contours[key];
         if (pts && pts.length > 0) {
-          pts.forEach(({ x, y }, i) => {
-            const newX = maxXForScale + (x - maxXForScale) * scaleX;
-            i ? facePath.lineTo(newX, y) : facePath.moveTo(newX, y);
-          });
+          // FACE contour'u için belirli indekslerdeki noktaları X ekseninde genişlet
+          if (key === "FACE") {
+            // Yüzün merkez X koordinatını bul
+            const centerX = (Math.min(...pts.map(p => p.x)) + Math.max(...pts.map(p => p.x))) / 2;
+            
+            pts.forEach(({ x, y }, index) => {
+              let newX = x;
+              
+              // Belirli indekslerdeki noktaları X ekseninde genişlet
+              if (foreheadContourIndices.includes(index)) {
+                // Merkezden uzaklığa göre genişlet - daha hassas hesaplama
+                const distanceFromCenter = Math.abs(x - centerX);
+                const maxDistanceFromCenter = faceSpanX / 2;
+                
+                // Merkezden uzak noktalar daha fazla genişletilsin (0.5x ile 1.0x arası)
+                const distanceRatio = Math.min(1.0, distanceFromCenter / maxDistanceFromCenter);
+                const adjustedExtension = foreheadExtensionX * (0.5 + distanceRatio * 0.5);
+                
+                if (x > centerX) {
+                  // Sağ taraf - daha sağa genişlet
+                  newX = x + adjustedExtension;
+                } else {
+                  // Sol taraf - daha sola genişlet
+                  newX = x - adjustedExtension;
+                }
+              }
+              
+              index === 0 ? facePath.moveTo(newX, y) : facePath.lineTo(newX, y);
+            });
+          } else {
+            // Diğer contourlar (LEFT_CHEEK, RIGHT_CHEEK) için normal işlem
+            pts.forEach(({ x, y }, index) => {
+              index === 0 ? facePath.moveTo(x, y) : facePath.lineTo(x, y);
+            });
+          }
           facePath.close();
         }
       });
 
-      // 2. Normal kontur
-      NECESSARY_CONTOURS.forEach((key) => {
-        const pts = contours[key];
-        if (pts && pts.length > 0) {
-          pts.forEach(({ x, y }, i) => {
-            i ? facePath.lineTo(x, y) : facePath.moveTo(x, y);
-          });
-          facePath.close();
-        }
-      });
+      // Normal kontur kısmı kaldırıldı - sadece genişletilmiş kontur kullanılıyor
 
       // 3. Hariç tutulacak bölgeler (göz, dudak)
       const excludePath = Skia.Path.Make();
