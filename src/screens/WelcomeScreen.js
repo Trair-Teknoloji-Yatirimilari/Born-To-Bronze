@@ -14,6 +14,7 @@ import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import AnimatedLogo from "../components/AnimatedLogo";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -140,10 +141,8 @@ const WelcomeScreen = () => {
         style={styles.gradient}
       >
         <View style={styles.container}>
-          <Image
-            source={require("../assets/logo.png")}
-            style={styles.welcomeLogo}
-          />
+          <AnimatedLogo width={1500} height={1500} />
+          
           {/* <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={styles.button}
