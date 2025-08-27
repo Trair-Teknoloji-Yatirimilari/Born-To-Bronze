@@ -1462,7 +1462,7 @@ function RealTimeScreen() {
                 onPress={() => setShareModalVisible(true)}
                 disabled={isProcessingPhoto || isSharing || isUploading}
               >
-                <Ionicons name="share-social" size={20} color="#fff" />
+                <Ionicons name="share-social" size={20} color={COLORS.text} />
                 <Text style={styles.actionButtonText}>Paylaş</Text>
               </TouchableOpacity>
 
@@ -1471,7 +1471,7 @@ function RealTimeScreen() {
                 onPress={buyProduct}
                 disabled={isProcessingPhoto}
               >
-                <Ionicons name="cart" size={20} color="#fff" />
+                <Ionicons name="cart" size={20} color={COLORS.text} />
                 <Text style={styles.actionButtonText}>Satın Al</Text>
               </TouchableOpacity>
 
@@ -1480,7 +1480,7 @@ function RealTimeScreen() {
                 onPress={closePreview}
                 disabled={isProcessingPhoto}
               >
-                <Ionicons name="close" size={20} color="#fff" />
+                <Ionicons name="close" size={20} color={COLORS.text} />
                 <Text style={styles.actionButtonText}>Kapat</Text>
               </TouchableOpacity>
             </View>
@@ -1510,7 +1510,7 @@ function RealTimeScreen() {
                     style={styles.shareOption}
                     onPress={handleShareApp}
                   >
-                    <Ionicons name="cloud-upload" size={32} color="#4CAF50" />
+                    <Ionicons name="cloud-upload" size={32} color={COLORS.text} />
                     <Text style={styles.shareOptionText}>Uygulama İçinde</Text>
                   </TouchableOpacity>
                   {Platform.OS === "android" && (
@@ -1522,7 +1522,7 @@ function RealTimeScreen() {
                         <Ionicons
                           name="logo-whatsapp"
                           size={32}
-                          color="#25D366"
+                          color={COLORS.text}
                         />
                         <Text style={styles.shareOptionText}>WhatsApp</Text>
                       </TouchableOpacity>
@@ -1533,7 +1533,7 @@ function RealTimeScreen() {
                         <Ionicons
                           name="logo-instagram"
                           size={32}
-                          color="#C13584"
+                          color={COLORS.text}
                         />
                         <Text style={styles.shareOptionText}>Instagram</Text>
                       </TouchableOpacity>
@@ -1543,7 +1543,7 @@ function RealTimeScreen() {
                     style={styles.shareOption}
                     onPress={handleShareOther}
                   >
-                    <Ionicons name="share-social" size={32} color="#555" />
+                    <Ionicons name="share-social" size={32} color={COLORS.text} />
                     <Text style={styles.shareOptionText}>Diğer</Text>
                   </TouchableOpacity>
                 </View>
@@ -2384,7 +2384,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   permissionButton: {
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: COLORS.background,
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 25,
@@ -2394,9 +2394,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   permissionButtonText: {
-    color: COLORS.background,
     fontSize: 16,
     fontWeight: "700",
+    color: COLORS.text,
   },
 
   // Preview Screen Styles
@@ -2536,16 +2536,17 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   shareButton: {
-    backgroundColor: "#4285F4",
+    backgroundColor: COLORS.button,
   },
   buyButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: COLORS.button,
   },
   closeButton: {
-    backgroundColor: COLORS.text,
+    backgroundColor: COLORS.active,
+    color: COLORS.text,
   },
   actionButtonText: {
-    color: "#fff",
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: "600",
     marginTop: 6,
@@ -2612,7 +2613,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 10,
     width: "100%",
-    backgroundColor: "rgba(0,0,0,0.05)",
+    backgroundColor: COLORS.button,
   },
   shareOptionText: {
     color: COLORS.text,
@@ -2620,7 +2621,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   shareCancelButton: {
-    backgroundColor: "#FF6B35",
+    backgroundColor: COLORS.active,
     paddingVertical: 12,
     paddingHorizontal: 30,
     borderRadius: 20,

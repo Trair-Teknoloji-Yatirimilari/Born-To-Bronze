@@ -1615,7 +1615,7 @@ const PhotoEditScreen = () => {
                       <Ionicons
                         name="hand-left"
                         size={20}
-                        color="rgba(255,255,255,0.8)"
+                        color={COLORS.text}
                       />
                       <Text style={styles.touchInstructionsText}>
                         Basılı tutarak orijinali gör
@@ -1638,7 +1638,15 @@ const PhotoEditScreen = () => {
                       {loading ? "Paylaşılıyor..." : "Paylaş"}
                     </Text>
                   </TouchableOpacity>
-                  <Text
+                  
+                  <TouchableOpacity
+                    style={[styles.resultButtons, styles.buyButton]}
+                    onPress={handlePurchase}
+                  >
+                    <Text>Hemen Satın Al</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text
                     style={{
                       textAlign: "center",
                       fontSize: 12,
@@ -1647,13 +1655,6 @@ const PhotoEditScreen = () => {
                   >
                     {`Fotoğrafınızı paylaşın ve sizin için özel oluşturulan indirim kodunu kaçırmayın!`}
                   </Text>
-                  <TouchableOpacity
-                    style={styles.resultButtons}
-                    onPress={handlePurchase}
-                  >
-                    <Text>Hemen Satın Al</Text>
-                  </TouchableOpacity>
-                </View>
                 {/* Benzer Fotoğraflar Bölümü */}
                 <View style={styles.similarPhotosSection}>
                   <View style={styles.similarPhotosHeader}>
@@ -1816,7 +1817,7 @@ const PhotoEditScreen = () => {
                     style={styles.shareOption}
                     onPress={handleShareApp}
                   >
-                    <Ionicons name="cloud-upload" size={32} color="#4CAF50" />
+                    <Ionicons name="cloud-upload" size={32} color={COLORS.text} />
                     <Text style={styles.shareOptionText}>Uygulama İçinde</Text>
                   </TouchableOpacity>
                   {Platform.OS === "android" && (
@@ -1825,14 +1826,14 @@ const PhotoEditScreen = () => {
                         style={styles.shareOption}
                         onPress={handleShareWhatsApp}
                       >
-                        <Ionicons name="logo-whatsapp" size={32} color="#25D366" />
+                        <Ionicons name="logo-whatsapp" size={32} color={COLORS.text} />
                         <Text style={styles.shareOptionText}>WhatsApp</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.shareOption}
                         onPress={handleShareInstagram}
                       >
-                        <Ionicons name="logo-instagram" size={32} color="#C13584" />
+                        <Ionicons name="logo-instagram" size={32} color={COLORS.text} />
                         <Text style={styles.shareOptionText}>Instagram</Text>
                       </TouchableOpacity>
                     </>
@@ -1841,7 +1842,7 @@ const PhotoEditScreen = () => {
                     style={styles.shareOption}
                     onPress={handleShareOther}
                   >
-                    <Ionicons name="share-social" size={32} color="#555" />
+                    <Ionicons name="share-social" size={32} color={COLORS.text} />
                     <Text style={styles.shareOptionText}>Diğer</Text>
                   </TouchableOpacity>
                 </View>
@@ -2234,14 +2235,14 @@ const styles = StyleSheet.create({
   touchInstructions: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: COLORS.background,
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 20,
     gap: 8,
   },
   touchInstructionsText: {
-    color: "rgba(255,255,255,0.9)",
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: "500",
   },
@@ -2251,13 +2252,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     textAlign: "center",
     width: "100%",
+    flexDirection: "row",
     padding: 10,
   },
   resultButtons: {
     backgroundColor: COLORS.button,
     padding: 10,
     borderRadius: 10,
-    width: "100%",
+    width: "50%",
     height: 50,
     justifyContent: "center",
     alignItems: "center",
@@ -2265,7 +2267,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   shareButton: {
-    backgroundColor: "#4CAF50", // Yeşil paylaş butonu
+    backgroundColor: COLORS.button, // Yeşil paylaş butonu
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -2508,7 +2510,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   shareModalContainer: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.background,
     borderRadius: 24,
     padding: 28,
     width: "90%",
@@ -2538,7 +2540,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 10,
     borderRadius: 16,
-    backgroundColor: "#F4EBD0",
+    backgroundColor: COLORS.button,
     marginHorizontal: 4,
   },
   shareOptionText: {
@@ -2552,12 +2554,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     padding: 10,
     borderRadius: 12,
-    backgroundColor: "#eee",
+    backgroundColor: COLORS.active,
     width: "100%",
     alignItems: "center",
   },
   shareCancelText: {
-    color: "#C13584",
+    color: COLORS.text,
     fontWeight: "700",
     fontSize: 16,
   },
