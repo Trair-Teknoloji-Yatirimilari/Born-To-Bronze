@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View, ActivityIndicator } from "react-native";
@@ -6,11 +6,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import BottomTabNavigator from './BottomTabNavigator';
 import PhotoEditScreen from "../screens/PhotoEditScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
+import RealTimeScreen from "../screens/RealTimeScreen";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { isOnboardingCompleted } from "../utils/onboarding";
 import { COLORS } from "../constants/theme";
 
 const Stack = createNativeStackNavigator();
+
+// Navigation referansını export et
+export const navigationRef = React.createRef();
 
 const AppNavigator = () => {
   const [isOnboardingDone, setIsOnboardingDone] = useState(null);
@@ -52,7 +56,7 @@ const AppNavigator = () => {
 
   return (
     <ErrorBoundary>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!isOnboardingDone ? (
             // Onboarding akışı
@@ -70,6 +74,7 @@ const AppNavigator = () => {
               <Stack.Screen name="Main" component={BottomTabNavigator} />
               <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
               <Stack.Screen name="PhotoEdit" component={PhotoEditScreen} />
+              <Stack.Screen name="RealTimeScreen" component={RealTimeScreen} />
             </>
           )}
         </Stack.Navigator>
