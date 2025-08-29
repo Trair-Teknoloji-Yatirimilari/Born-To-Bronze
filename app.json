@@ -2,7 +2,7 @@
   "expo": {
     "name": "Eda",
     "slug": "bronze-cream",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -22,7 +22,7 @@
         "NSPhotoLibraryUsageDescription": "Eda uygulamasının fotoğraflarınıza erişmesine izin verin",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "12"
+      "buildNumber": "13"
     },
     "android": {
       "adaptiveIcon": {

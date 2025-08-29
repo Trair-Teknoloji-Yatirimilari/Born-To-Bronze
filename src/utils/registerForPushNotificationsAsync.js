@@ -106,10 +106,7 @@ export async function registerForPushNotificationsAsync() {
           projectId,
         })
       ).data;
-      console.log(pushTokenString);
 
-      //TODO: send push token to server
-      //uniqueId, pushToken, deviceInfo
       const deviceInfo = await getDeviceInfo();
       try {
         await fetch(

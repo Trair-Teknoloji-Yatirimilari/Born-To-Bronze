@@ -37,29 +37,21 @@ export const NotificationProvider = ({ children }) => {
 
     notificationListener.current =
       Notifications.addNotificationReceivedListener((notification) => {
-        console.log("🔔 Notification Received: ", notification);
         setNotification(notification);
       });
 
     responseListener.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log(
-          "🔔 Notification Response: ",
-          JSON.stringify(response, null, 2)
-        );
         
         const notificationData = response.notification.request.content.data;
-        console.log("🔔 Notification Data: ", JSON.stringify(notificationData, null, 2));
-        
+
         // Bildirim verisi kontrolü
         if (!notificationData) {
-          console.log("⚠️ Bildirim verisi bulunamadı");
           return;
         }
 
         // hasGoToUrl kontrolü ve URL açma
         if (notificationData.hasGoToUrl === true && notificationData.url) {
-          console.log("🌐 URL açılıyor: ", notificationData.url);
           Linking.openURL(notificationData.url).catch(err => {
             console.error("❌ URL açılamadı: ", err);
           });
@@ -68,13 +60,11 @@ export const NotificationProvider = ({ children }) => {
 
         // hasGoToUrl kontrolü ve route navigasyonu
         if (notificationData.hasGoToRoute === true && notificationData.route) {
-          console.log("🧭 Route'a yönlendiriliyor: ", notificationData.route);
-          
+
           // Navigation ref kontrolü
           if (navigationRef.current) {
             try {
               navigationRef.current.navigate(notificationData.route, notificationData.params || {});
-              console.log("✅ Route navigasyonu başarılı");
             } catch (error) {
               console.error("❌ Route navigasyonu başarısız: ", error);
             }
