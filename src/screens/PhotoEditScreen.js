@@ -1058,7 +1058,23 @@ const PhotoEditScreen = () => {
   // Paylaşım seçenekleri fonksiyonları
   const handleShareApp = async () => {
     setShareModalVisible(false);
-    await sharePhoto();
+    Alert.alert(
+      "Paylaşım Onayı",
+      "Uygulama içerisinde fotoğrafınızı paylaşmak istediğinizden emin misiniz? Bu fotoğrafı uygulamayı kullanan diğer kullanıcılar da görebilir.",
+      [
+        {
+          text: "Hayır",
+          style: "cancel",
+        },
+        {
+          text: "Evet",
+          onPress: async () => {
+            await sharePhoto();
+          },
+          style: "default",
+        },
+      ]
+    );
   };
   const handleShareWhatsApp = async () => {
     setShareModalVisible(false);

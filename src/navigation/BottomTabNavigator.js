@@ -1,7 +1,7 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-
+import { Platform } from "react-native";
 // Ekranları import et
 import HomeScreen from "../screens/WelcomeScreen";
 import RealTimePreviewScreen from "../screens/RealTimeScreen";
@@ -52,13 +52,15 @@ const BottomTabNavigator = () => {
           tabBarLabel: "Ana Sayfa",
         }}
       />
-      <Tab.Screen
-        name="Gerçek Zamanlı Önizleme"
-        component={RealTimePreviewScreen}
-        options={{
-          tabBarLabel: "Gerçek Zamanlı Önizleme",
-        }}
-      />
+      {!Platform.OS === "android" && (
+        <Tab.Screen
+          name="Gerçek Zamanlı Önizleme"
+          component={RealTimePreviewScreen}
+          options={{
+            tabBarLabel: "Gerçek Zamanlı Önizleme",
+          }}
+        />
+      )}
       <Tab.Screen
         name="Düzenle ve Önizleme"
         component={EditAndPreviewScreen}
