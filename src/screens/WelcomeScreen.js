@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ImageBackground,
   Image,
   Animated,
@@ -12,19 +11,14 @@ import {
 } from "react-native";
 import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
 import AnimatedLogo from "../components/AnimatedLogo";
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const WelcomeScreen = () => {
-  const navigation = useNavigation();
   const [sharedPhotos, setSharedPhotos] = useState([]);
   const API_URL = "https://kafanagoreya.yumru.dev";
 
   const animatedValue = useRef(new Animated.Value(0)).current;
-  const [dialogResult, setDialogResult] = useState(null);
 
   useEffect(() => {
     const fetchSharedPhotos = async () => {

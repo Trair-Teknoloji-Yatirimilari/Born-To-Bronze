@@ -11,7 +11,6 @@ import {
   Alert,
   BackHandler,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useCameraPermission } from "react-native-vision-camera";
 import { COLORS } from "../constants/theme";

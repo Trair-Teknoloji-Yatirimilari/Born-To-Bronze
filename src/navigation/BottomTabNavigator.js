@@ -2,7 +2,6 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform } from "react-native";
-// Ekranları import et
 import HomeScreen from "../screens/WelcomeScreen";
 import RealTimePreviewScreen from "../screens/RealTimeScreen";
 import EditAndPreviewScreen from "../screens/PhotoEditScreen";

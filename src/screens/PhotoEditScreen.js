@@ -13,7 +13,6 @@ import {
   Animated,
   Platform,
   ImageBackground,
-  useAnimatedValue,
   StatusBar,
   Linking,
   SafeAreaView,

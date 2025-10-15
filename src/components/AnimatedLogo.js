@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { View, StyleSheet } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import Animated, {
@@ -6,7 +6,6 @@ import Animated, {
   useAnimatedProps,
   withTiming,
   Easing,
-  runOnJS,
   interpolateColor,
 } from "react-native-reanimated";
 
