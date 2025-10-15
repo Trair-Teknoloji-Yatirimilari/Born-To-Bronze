@@ -82,21 +82,6 @@ export const checkOnboardingMilestone = async (milestone) => {
   }
 };
 
-// Reset onboarding (for testing)
-export const resetOnboarding = async () => {
-  try {
-    await AsyncStorage.multiRemove([
-      ONBOARDING_KEYS.COMPLETED,
-      ONBOARDING_KEYS.CURRENT_STEP,
-      ONBOARDING_KEYS.WELCOME_SHOWN,
-      ONBOARDING_KEYS.FEATURES_DISCOVERED,
-      ONBOARDING_KEYS.PERMISSIONS_GRANTED,
-      ONBOARDING_KEYS.TUTORIAL_COMPLETED,
-    ]);
-  } catch (error) {
-    console.error('Error resetting onboarding:', error);
-  }
-};
 
 // Get onboarding progress percentage
 export const getOnboardingProgress = async () => {
