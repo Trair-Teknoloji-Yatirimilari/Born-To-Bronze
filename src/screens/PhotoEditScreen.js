@@ -36,6 +36,7 @@ import * as FileSystem from "expo-file-system";
 
 import DeviceInfo from "react-native-device-info";
 import Share from "react-native-share";
+import Dialog from "../components/Dialog";
 
 // Fırça boyutu için sabitleri güncelliyoruz
 const MIN_BRUSH_RADIUS = 5;
@@ -282,6 +283,19 @@ const getDeviceInfo = async () => {
 
 const PhotoEditScreen = () => {
   const navigation = useNavigation();
+  const [stdAlertVisible, setStdAlertVisible] = useState(false);
+  const [stdAlertTitle, setStdAlertTitle] = useState("");
+  const [stdAlertMessage, setStdAlertMessage] = useState("");
+  const [confirmLinkVisible, setConfirmLinkVisible] = useState(false);
+  const [confirmClearDrawingVisible, setConfirmClearDrawingVisible] = useState(false);
+  const [confirmClearImageVisible, setConfirmClearImageVisible] = useState(false);
+  const [confirmShareVisible, setConfirmShareVisible] = useState(false);
+
+  const showAlert = (title, message) => {
+    setStdAlertTitle(title || "");
+    setStdAlertMessage(message || "");
+    setStdAlertVisible(true);
+  };
   const [step, setStep] = useState(0); // 0: Fotoğraf seçme, 1: Alan Seçme, 2: Ürün seçme, 3: Bronzlaştır
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -410,7 +424,7 @@ const PhotoEditScreen = () => {
   // Paylaş fonksiyonu
   const sharePhoto = async () => {
     if (!resultImageId) {
-      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      showAlert("Hata", "Paylaşılacak fotoğraf bulunamadı.");
       return;
     }
 
@@ -431,26 +445,20 @@ const PhotoEditScreen = () => {
 
       const result = await response.json();
       if (result.success) {
-        Alert.alert(
-          "Başarılı! 🎉",
-          "Fotoğrafınız başarıyla paylaşıldı! Şimdi diğer kullanıcılar da görebilir.",
-          [
-            {
-              text: "Tamam",
-              style: "default",
-            },
-          ]
+        showAlert(
+          "Paylaşım Başarılı",
+          "Fotoğrafınız başarıyla paylaşıldı. Topluluk, çalışmanızı şimdi görebilir."
         );
         // Paylaş sonrası benzer fotoğrafları yenile
         if (selectedProduct?.id) {
           fetchSimilarPhotos(selectedProduct.id, resultImageId);
         }
       } else {
-        Alert.alert("Hata", result.error || "Paylaşım sırasında hata oluştu.");
+        showAlert("Paylaşım Hatası", result.error || "Paylaşım sırasında bir sorun oluştu.");
       }
     } catch (error) {
       console.error("Paylaş hatası:", error);
-      Alert.alert("Hata", "Paylaşım sırasında bağlantı hatası oluştu.");
+      showAlert("Bağlantı Hatası", "Paylaşım sırasında bağlantı hatası oluştu.");
     } finally {
       setLoading(false);
     }
@@ -513,20 +521,23 @@ const PhotoEditScreen = () => {
   // Hemen Satın Al fonksiyonu
   const handlePurchase = async () => {
     if (!selectedProduct || !selectedProduct.link) {
-      Alert.alert("Hata", "Lütfen önce bir ürün seçin!");
+      showAlert("Hata", "Lütfen önce bir ürün seçin.");
       return;
     }
 
     try {
       const supported = await Linking.canOpenURL(selectedProduct.link);
       if (supported) {
-        await Linking.openURL(selectedProduct.link);
+        // Dış link onayı
+        // Not: Onboarding kapsamı dışında; burada doğrudan yönlendirme vardı.
+        // Dialog ile onaylayarak açmayı tercih edeceğiz: bileşeni en alta ekledik.
+        setConfirmLinkVisible(true);
       } else {
-        Alert.alert("Hata", "Bu link açılamıyor: " + selectedProduct.link);
+        showAlert("Bağlantı Hatası", "Bu link açılamıyor: " + selectedProduct.link);
       }
     } catch (error) {
       console.error("Link açılırken hata:", error);
-      Alert.alert("Hata", "Satın alma sayfası açılırken hata oluştu.");
+      showAlert("Hata", "Satın alma sayfası açılırken bir sorun oluştu.");
     }
   };
 
@@ -570,7 +581,7 @@ const PhotoEditScreen = () => {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
 
       if (status !== "granted") {
-        Alert.alert("Hata", "Kamera erişim izni gerekiyor!");
+        showAlert("İzin Gerekli", "Kamera erişim izni gerekiyor.");
         return;
       }
 
@@ -626,7 +637,7 @@ const PhotoEditScreen = () => {
               height: manipulatedImage.height,
             });
           } catch (error) {
-            Alert.alert("Hata", "Fotoğraf kırpılırken hata oluştu");
+            showAlert("Hata", "Fotoğraf kırpılırken hata oluştu.");
             return;
           }
         } else {
@@ -641,7 +652,7 @@ const PhotoEditScreen = () => {
       } else {
       }
     } catch (error) {
-      Alert.alert("Hata", "Kamera açılırken hata oluştu: " + error.message);
+      showAlert("Hata", "Kamera açılırken hata oluştu: " + error.message);
     }
   };
 
@@ -791,7 +802,7 @@ const PhotoEditScreen = () => {
 
   const applyBronzeEffect = async () => {
     if (!image || paths.length === 0) {
-      Alert.alert("Hata", "Lütfen bir fotoğraf seçin ve alan işaretleyin!");
+      showAlert("Hata", "Lütfen bir fotoğraf seçin ve alan işaretleyin.");
       return;
     }
     setLoading(true);
@@ -876,50 +887,21 @@ const PhotoEditScreen = () => {
         setResultImageId(result.imageId); // Paylaş için imageId'yi kaydet
         setStep(3);
       } else {
-        Alert.alert("Hata", "Filtrelenmiş fotoğraf alınamadı.");
+        showAlert("Hata", "Filtrelenmiş fotoğraf alınamadı.");
       }
     } catch (e) {
-      Alert.alert("Hata", "Filtre uygulanırken hata oluştu: " + e.message);
+      showAlert("Hata", "Filtre uygulanırken hata oluştu: " + e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const clearDrawing = () => {
-    Alert.alert(
-      "Çizimleri Temizle",
-      "Çizimleri temizlemek istediğinize emin misiniz?",
-      [
-        { text: "İptal", style: "cancel" },
-        {
-          text: "Temizle",
-          onPress: () => {
-            setPaths([]);
-            setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
-          },
-        },
-      ]
-    );
+    setConfirmClearDrawingVisible(true);
   };
 
   const clearImage = () => {
-    Alert.alert(
-      "Fotoğrafı Temizle",
-      "Fotoğrafı temizlemek istediğinize emin misiniz?",
-      [
-        { text: "İptal", style: "cancel" },
-        {
-          text: "Temizle",
-          onPress: () => {
-            setImage(null);
-            setPaths([]);
-            setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
-            setSelectedProduct(null);
-            setStep(0);
-          },
-        },
-      ]
-    );
+    setConfirmClearImageVisible(true);
   };
 
   const ProductItem = ({ product }) => {
@@ -977,7 +959,7 @@ const PhotoEditScreen = () => {
         await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (status !== "granted") {
-        Alert.alert("Hata", "Galeriye erişim izni gerekiyor!");
+        showAlert("İzin Gerekli", "Galeriye erişim izni gerekiyor.");
         return;
       }
 
@@ -1034,7 +1016,7 @@ const PhotoEditScreen = () => {
             });
           } catch (error) {
             console.error("❌ Kırpma hatası:", error);
-            Alert.alert("Hata", "Fotoğraf kırpılırken hata oluştu");
+            showAlert("Hata", "Fotoğraf kırpılırken hata oluştu.");
             return;
           }
         } else {
@@ -1051,35 +1033,19 @@ const PhotoEditScreen = () => {
       }
     } catch (error) {
       console.error("Galeri hatası:", error);
-      Alert.alert("Hata", "Galeri açılırken hata oluştu: " + error.message);
+      showAlert("Hata", "Galeri açılırken hata oluştu: " + error.message);
     }
   };
 
   // Paylaşım seçenekleri fonksiyonları
   const handleShareApp = async () => {
     setShareModalVisible(false);
-    Alert.alert(
-      "Paylaşım Onayı",
-      "Uygulama içerisinde fotoğrafınızı paylaşmak istediğinizden emin misiniz? Bu fotoğrafı uygulamayı kullanan diğer kullanıcılar da görebilir.",
-      [
-        {
-          text: "Hayır",
-          style: "cancel",
-        },
-        {
-          text: "Evet",
-          onPress: async () => {
-            await sharePhoto();
-          },
-          style: "default",
-        },
-      ]
-    );
+    setConfirmShareVisible(true);
   };
   const handleShareWhatsApp = async () => {
     setShareModalVisible(false);
     if (!resultImage) {
-      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      showAlert("Hata", "Paylaşılacak fotoğraf bulunamadı.");
       return;
     }
     try {
@@ -1101,7 +1067,7 @@ const PhotoEditScreen = () => {
   const handleShareInstagram = async () => {
     setShareModalVisible(false);
     if (!resultImage) {
-      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      showAlert("Hata", "Paylaşılacak fotoğraf bulunamadı.");
       return;
     }
     try {
@@ -1122,7 +1088,7 @@ const PhotoEditScreen = () => {
   const handleShareOther = async () => {
     setShareModalVisible(false);
     if (!resultImage) {
-      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      showAlert("Hata", "Paylaşılacak fotoğraf bulunamadı.");
       return;
     }
     try {
@@ -1899,6 +1865,86 @@ const PhotoEditScreen = () => {
           </View>
         </View>
       )}
+      {/* Confirm: Clear Drawings */}
+      <Dialog
+        visible={confirmClearDrawingVisible}
+        mode="dialog"
+        icon="trash"
+        title="Çizimleri Temizle"
+        message="Seçim çizimlerini temizlemek istediğinize emin misiniz? Bu işlem geri alınamaz."
+        confirmText="Temizle"
+        cancelText="Vazgeç"
+        onClose={() => setConfirmClearDrawingVisible(false)}
+        onConfirm={() => {
+          setConfirmClearDrawingVisible(false);
+          setPaths([]);
+          setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
+        }}
+      />
+
+      {/* Confirm: Clear Photo */}
+      <Dialog
+        visible={confirmClearImageVisible}
+        mode="dialog"
+        icon="image"
+        title="Fotoğrafı Temizle"
+        message="Fotoğrafı temizlemek istediğinize emin misiniz? Tüm seçimler ve ayarlar sıfırlanacaktır."
+        confirmText="Temizle"
+        cancelText="Vazgeç"
+        onClose={() => setConfirmClearImageVisible(false)}
+        onConfirm={() => {
+          setConfirmClearImageVisible(false);
+          setImage(null);
+          setPaths([]);
+          setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
+          setSelectedProduct(null);
+          setStep(0);
+        }}
+      />
+
+      {/* Confirm: App Share */}
+      <Dialog
+        visible={confirmShareVisible}
+        mode="dialog"
+        icon="share-social"
+        title="Paylaşımı Onayla"
+        message="Fotoğrafınızı uygulama içinde toplulukla paylaşmak istiyor musunuz?"
+        confirmText="Paylaş"
+        cancelText="Vazgeç"
+        onClose={() => setConfirmShareVisible(false)}
+        onConfirm={async () => {
+          setConfirmShareVisible(false);
+          await sharePhoto();
+        }}
+      />
+      {/* Standardized Alert */}
+      <Dialog
+        visible={stdAlertVisible}
+        mode="alert"
+        icon="information-circle"
+        title={stdAlertTitle}
+        message={stdAlertMessage}
+        onClose={() => setStdAlertVisible(false)}
+        onConfirm={() => setStdAlertVisible(false)}
+      />
+
+      {/* Confirm: External Link */}
+      <Dialog
+        visible={confirmLinkVisible}
+        mode="dialog"
+        icon="link"
+        title="Dış Bağlantı"
+        message="Satın alma sayfası tarayıcıda açılacak. Devam etmek istiyor musunuz?"
+        confirmText="Devam Et"
+        cancelText="Vazgeç"
+        onClose={() => setConfirmLinkVisible(false)}
+        onConfirm={async () => {
+          setConfirmLinkVisible(false);
+          try {
+            if (selectedProduct?.link) await Linking.openURL(selectedProduct.link);
+          } catch {}
+        }}
+      />
     </SafeAreaView>
   );
 };

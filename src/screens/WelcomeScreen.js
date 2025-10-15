@@ -15,7 +15,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import AnimatedLogo from "../components/AnimatedLogo";
-import Dialog from "../components/Dialog";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -144,81 +143,6 @@ const WelcomeScreen = () => {
       >
         <View style={styles.container}>
           <AnimatedLogo width={1500} height={1500} />
-          <View style={styles.buttonContainer}>
-            <Dialog
-              variant="normal"
-              title="Devam etmek istiyor musun?"
-              message="Seçilen işlemi yürütmek istiyor musun?"
-              icon="information-circle"
-              onClose={() => setDialogResult("İptal edildi")}
-              onConfirm={() => setDialogResult("Onaylandı")}
-              renderTrigger={({ open }) => (
-                <TouchableOpacity style={styles.button} onPress={open}>
-                  <Ionicons name="information-circle" size={24} color={COLORS.text} />
-                  <Text style={styles.buttonText}>Onay Diyaloğu Demo</Text>
-                </TouchableOpacity>
-              )}
-            />
-
-            <Dialog
-              variant="destructive"
-              title="İşlem Onayı"
-              message="Bu işlem geri alınamaz. Devam etmek istediğine emin misin?"
-              icon="alert-circle"
-              onClose={() => setDialogResult("İptal edildi")}
-              onConfirm={() => setDialogResult("Onaylandı")}
-              renderTrigger={({ open }) => (
-                <TouchableOpacity style={styles.button} onPress={open}>
-                  <Ionicons name="alert-circle" size={24} color={COLORS.text} />
-                  <Text style={styles.buttonText}>Destructive Demo</Text>
-                </TouchableOpacity>
-              )}
-            />
-
-            <Dialog
-              mode="alert"
-              variant="normal"
-              title="Bilgilendirme"
-              message="Bu bir alert örneğidir. Tamam butonu veya arka plana dokunarak kapatabilirsiniz."
-              icon="notifications"
-              onClose={() => setDialogResult("Alert kapandı (backdrop)")}
-              onConfirm={() => setDialogResult("Tamam ile kapandı")}
-              renderTrigger={({ open }) => (
-                <TouchableOpacity style={styles.button} onPress={open}>
-                  <Ionicons name="notifications" size={24} color={COLORS.text} />
-                  <Text style={styles.buttonText}>Alert Demo (Tamam + Backdrop)</Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-          {dialogResult ? (
-            <Text style={styles.subtitle}>Sonuç: {dialogResult}</Text>
-          ) : null}
-
-          {/* Dialog tetikleyicileri yukarıda. */}
-          {/* <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => navigation.navigate("Gerçek Zamanlı Önizleme")}
-            >
-              <Ionicons name="camera" size={24} color={COLORS.text} />
-              <Text style={styles.buttonText}>Gerçek Zamanlı Deneyim</Text>
-            </TouchableOpacity>
-            <Text style={styles.subtitle}>
-              ile yüzünüze otomatik bronzlaştırıcı kremler uygulayabilirsiniz.
-              Veya
-            </Text>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => navigation.navigate("Düzenle ve Önizleme")}
-            >
-              <Ionicons name="image" size={24} color={COLORS.text} />
-              <Text style={styles.buttonText}>Fotoğraf Seçerek</Text>
-            </TouchableOpacity>
-            <Text style={styles.subtitle}>
-              istediğiniz alanları seçerek bronzlaştırıcı kremler uygulayabilirsiniz.
-            </Text>
-          </View> */}
         </View>
       </LinearGradient>
     </ImageBackground>

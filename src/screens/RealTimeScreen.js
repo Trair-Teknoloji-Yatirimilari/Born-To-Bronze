@@ -39,6 +39,7 @@ import DeviceInfo from "react-native-device-info";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../constants/theme";
 import Share from "react-native-share";
+import Dialog from "../components/Dialog";
 
 // API URL Configuration
 const API_URL = "https://kafanagoreya.yumru.dev";
@@ -154,6 +155,17 @@ function RealTimeScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [imageLoading, setImageLoading] = useState(false); // Fotoğraf yükleniyor mu?
+  const [confirmShareVisible, setConfirmShareVisible] = useState(false);
+  const [confirmLinkVisible, setConfirmLinkVisible] = useState(false);
+  const [stdAlertVisible, setStdAlertVisible] = useState(false);
+  const [stdAlertTitle, setStdAlertTitle] = useState("");
+  const [stdAlertMessage, setStdAlertMessage] = useState("");
+
+  const showAlert = (title, message) => {
+    setStdAlertTitle(title || "");
+    setStdAlertMessage(message || "");
+    setStdAlertVisible(true);
+  };
 
   // Animasyonlar
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -781,7 +793,7 @@ function RealTimeScreen() {
   async function sharePhoto() {
     try {
       if (!filteredPhoto || !filteredPhoto.path) {
-        Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+        showAlert("Hata", "Paylaşılacak fotoğraf bulunamadı.");
         return;
       }
 
@@ -805,11 +817,7 @@ function RealTimeScreen() {
       }
     } catch (error) {
       console.error("❌ Paylaşım hatası:", error);
-      Alert.alert(
-        "Paylaşım Hatası",
-        "Fotoğraf paylaşılırken hata oluştu. Lütfen tekrar deneyin.",
-        [{ text: "Tamam", style: "default" }]
-      );
+      showAlert("Paylaşım Hatası", "Fotoğraf paylaşılırken bir sorun oluştu. Lütfen tekrar deneyin.");
     } finally {
       setIsSharing(false);
     }
@@ -855,18 +863,9 @@ function RealTimeScreen() {
           console.warn("Vibration hatası:", vibrationError);
         }
 
-        Alert.alert(
-          "Paylaşım Başarılı! 🎉",
-          "Fotoğrafınız başarıyla paylaşıldı! Şimdi diğer kullanıcılar da bronzlaştırma filtrenizi görebilir.",
-          [
-            {
-              text: "Harika! 🚀",
-              style: "default",
-              onPress: () => {
-                // Başarılı paylaşım sonrası UI feedback
-              },
-            },
-          ]
+        showAlert(
+          "Paylaşım Başarılı",
+          "Fotoğrafınız başarıyla paylaşıldı. Topluluk, çalışmanızı şimdi görebilir."
         );
       } else {
         throw new Error(result?.error || "Paylaşım API'si hatası");
@@ -897,7 +896,7 @@ function RealTimeScreen() {
     //   }
     // };
     if (selectedProduct.link) {
-      Linking.openURL(selectedProduct.link);
+      setConfirmLinkVisible(true);
     }
   }
 
@@ -1045,28 +1044,12 @@ function RealTimeScreen() {
   // Paylaşım fonksiyonları
   const handleShareApp = async () => {
     setShareModalVisible(false);
-    Alert.alert(
-      "Paylaşım Onayı",
-      "Uygulama içerisinde fotoğrafınızı paylaşmak istediğinizden emin misiniz? Bu fotoğrafı uygulamayı kullanan diğer kullanıcılar da görebilir.",
-      [
-        {
-          text: "Hayır",
-          style: "cancel",
-        },
-        {
-          text: "Evet",
-          onPress: async () => {
-            await sharePhoto();
-          },
-          style: "default",
-        },
-      ]
-    );
+    setConfirmShareVisible(true);
   };
   const handleShareWhatsApp = async () => {
     setShareModalVisible(false);
     if (!filteredPhoto || !filteredPhoto.path) {
-      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      showAlert("Hata", "Paylaşılacak fotoğraf bulunamadı.");
       return;
     }
     try {
@@ -1083,7 +1066,7 @@ function RealTimeScreen() {
           shareUrl = downloadRes.uri;
         } catch (downloadError) {
           console.error("Dosya indirme hatası:", downloadError);
-          Alert.alert("Hata", "Fotoğraf indirilemedi!");
+          showAlert("İndirme Hatası", "Fotoğraf indirilemedi.");
           return;
         }
       }
@@ -1095,13 +1078,13 @@ function RealTimeScreen() {
       });
     } catch (shareError) {
       console.error("WhatsApp paylaşım hatası:", shareError);
-      Alert.alert("Paylaşım Hatası", "WhatsApp'ta paylaşım yapılamadı.");
+      showAlert("Paylaşım Hatası", "WhatsApp’ta paylaşım yapılamadı.");
     }
   };
   const handleShareInstagram = async () => {
     setShareModalVisible(false);
     if (!filteredPhoto || !filteredPhoto.path) {
-      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      showAlert("Hata", "Paylaşılacak fotoğraf bulunamadı.");
       return;
     }
     try {
@@ -1118,7 +1101,7 @@ function RealTimeScreen() {
           shareUrl = downloadRes.uri;
         } catch (downloadError) {
           console.error("Dosya indirme hatası:", downloadError);
-          Alert.alert("Hata", "Fotoğraf indirilemedi!");
+          showAlert("İndirme Hatası", "Fotoğraf indirilemedi.");
           return;
         }
       }
@@ -1130,13 +1113,13 @@ function RealTimeScreen() {
       });
     } catch (shareError) {
       console.error("Instagram paylaşım hatası:", shareError);
-      Alert.alert("Paylaşım Hatası", "Instagram'da paylaşım yapılamadı.");
+      showAlert("Paylaşım Hatası", "Instagram’da paylaşım yapılamadı.");
     }
   };
   const handleShareOther = async () => {
     setShareModalVisible(false);
     if (!filteredPhoto || !filteredPhoto.path) {
-      Alert.alert("Hata", "Paylaşılacak fotoğraf bulunamadı!");
+      showAlert("Hata", "Paylaşılacak fotoğraf bulunamadı.");
       return;
     }
     try {
@@ -1154,7 +1137,7 @@ function RealTimeScreen() {
           shareUrl = downloadRes.uri;
         } catch (downloadError) {
           console.error("Dosya indirme hatası:", downloadError);
-          Alert.alert("Hata", "Fotoğraf indirilemedi!");
+          showAlert("İndirme Hatası", "Fotoğraf indirilemedi.");
           return;
         }
       }
@@ -1168,12 +1151,12 @@ function RealTimeScreen() {
       try {
         const fileInfo = await FileSystem.getInfoAsync(shareUrl);
         if (!fileInfo.exists) {
-          Alert.alert("Hata", "Paylaşılacak dosya bulunamadı veya erişilemiyor!");
+          showAlert("Hata", "Paylaşılacak dosya bulunamadı veya erişilemiyor.");
           return;
         }
       } catch (fileCheckError) {
         console.error("Dosya kontrol hatası:", fileCheckError);
-        Alert.alert("Hata", "Dosya kontrol edilemedi!");
+        showAlert("Hata", "Dosya kontrol edilemedi.");
         return;
       }
       
@@ -1186,10 +1169,7 @@ function RealTimeScreen() {
       });
     } catch (shareError) {
       console.error("Genel paylaşım hatası:", shareError);
-      Alert.alert(
-        "Paylaşım Hatası",
-        `Paylaşım ekranı açılamadı: ${shareError.message || 'Bilinmeyen hata'}`
-      );
+      showAlert("Paylaşım Hatası", `Paylaşım ekranı açılamadı: ${shareError.message || 'Bilinmeyen hata'}`);
     }
   };
 
@@ -1937,6 +1917,51 @@ function RealTimeScreen() {
           <Ionicons name="camera-reverse" size={24} color={COLORS.text} />
         </TouchableOpacity>
       </View>
+
+      {/* Standardized Alert */}
+      <Dialog
+        visible={stdAlertVisible}
+        mode="alert"
+        icon="information-circle"
+        title={stdAlertTitle}
+        message={stdAlertMessage}
+        onClose={() => setStdAlertVisible(false)}
+        onConfirm={() => setStdAlertVisible(false)}
+      />
+
+      {/* Confirm: App Share */}
+      <Dialog
+        visible={confirmShareVisible}
+        mode="dialog"
+        icon="share-social"
+        title="Paylaşımı Onayla"
+        message="Fotoğrafınızı uygulama içinde toplulukla paylaşmak istediğinizden emin misiniz?"
+        confirmText="Paylaş"
+        cancelText="Vazgeç"
+        onClose={() => setConfirmShareVisible(false)}
+        onConfirm={async () => {
+          setConfirmShareVisible(false);
+          await sharePhoto();
+        }}
+      />
+
+      {/* Confirm: External Link */}
+      <Dialog
+        visible={confirmLinkVisible}
+        mode="dialog"
+        icon="link"
+        title="Dış Bağlantı"
+        message="Satın alma sayfası tarayıcıda açılacak. Devam etmek istiyor musunuz?"
+        confirmText="Devam Et"
+        cancelText="Vazgeç"
+        onClose={() => setConfirmLinkVisible(false)}
+        onConfirm={async () => {
+          setConfirmLinkVisible(false);
+          if (selectedProduct?.link) {
+            try { await Linking.openURL(selectedProduct.link); } catch {}
+          }
+        }}
+      />
     </View>
   );
 }
