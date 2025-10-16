@@ -12,11 +12,27 @@ import {
 import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
 import AnimatedLogo from "../components/AnimatedLogo";
+import SharedPhotos from "../components/SharedPhotos";
 
 
 const WelcomeScreen = () => {
   const [sharedPhotos, setSharedPhotos] = useState([]);
+  const [mySharedPhotos, setMySharedPhotos] = useState([]);
   const API_URL = "https://kafanagoreya.yumru.dev";
+
+  // useEffect(() => {
+  //   const fetchMySharedPhotos = async () => {
+  //     try {
+  //       const response = await fetch(`${API_URL}/api/user/getMyPhotos`);
+  //       const data = await response.json();
+  //       setMySharedPhotos(data.data);
+  //     } catch (e) {
+  //       console.error(e);
+  //     }
+  //   };
+  //   fetchMySharedPhotos();
+  // }, []);
+
 
   const animatedValue = useRef(new Animated.Value(0)).current;
 
@@ -128,6 +144,7 @@ const WelcomeScreen = () => {
       source={require("../assets/welcome-bg.png")}
       style={styles.background}
     >
+      <SharedPhotos apiUrl={API_URL} />
       {/* Sonsuz kayan fotoğraflar */}
       {renderInfiniteSlider()}
 
