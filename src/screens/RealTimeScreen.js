@@ -42,7 +42,7 @@ import Share from "react-native-share";
 import Dialog from "../components/Dialog";
 
 // API URL Configuration
-const API_URL = "https://kafanagoreya.yumru.dev";
+const API_URL = "https://bronze-api.trair.com.tr";
 
 // __DEV__
 //   ? Platform.select({

@@ -26,7 +26,7 @@ const WelcomeScreen = () => {
   const [sharedPhotos, setSharedPhotos] = useState([]);
   const [mySharedPhotos, setMySharedPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const API_URL = "https://kafanagoreya.yumru.dev";
+  const API_URL = "https://bronze-api.trair.com.tr";
 
   // useEffect(() => {
   //   const fetchMySharedPhotos = async () => {
