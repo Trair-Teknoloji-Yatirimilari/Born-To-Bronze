@@ -7,6 +7,10 @@ import BottomTabNavigator from './BottomTabNavigator';
 import PhotoEditScreen from "../screens/PhotoEditScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
 import RealTimeScreen from "../screens/RealTimeScreen";
+import TermsAcceptanceScreen, { checkTermsAccepted } from "../screens/TermsAcceptanceScreen";
+import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
+import TermsOfServiceScreen from "../screens/TermsOfServiceScreen";
+import SettingsScreen from "../screens/SettingsScreen";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { isOnboardingCompleted } from "../utils/onboarding";
 import { COLORS } from "../constants/theme";
@@ -18,23 +22,32 @@ export const navigationRef = React.createRef();
 
 const AppNavigator = () => {
   const [isOnboardingDone, setIsOnboardingDone] = useState(null);
+  const [isTermsAccepted, setIsTermsAccepted] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    checkOnboardingStatus();
+    checkAppStatus();
   }, []);
 
-  const checkOnboardingStatus = async () => {
+  const checkAppStatus = async () => {
     try {
-      const completed = await isOnboardingCompleted();
-      setIsOnboardingDone(completed);
+      const termsAccepted = await checkTermsAccepted();
+      const onboardingCompleted = await isOnboardingCompleted();
+      
+      setIsTermsAccepted(termsAccepted);
+      setIsOnboardingDone(onboardingCompleted);
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
-      // Hata durumunda onboarding'i göster
+      console.error('Error checking app status:', error);
+      // Hata durumunda terms'i göster
+      setIsTermsAccepted(false);
       setIsOnboardingDone(false);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleTermsAccept = () => {
+    setIsTermsAccepted(true);
   };
 
   const handleOnboardingComplete = () => {
@@ -58,7 +71,21 @@ const AppNavigator = () => {
     <ErrorBoundary>
       <NavigationContainer ref={navigationRef}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {!isOnboardingDone ? (
+          {!isTermsAccepted ? (
+            // Terms acceptance akışı (en önce)
+            <>
+              <Stack.Screen name="TermsAcceptance">
+                {(props) => (
+                  <TermsAcceptanceScreen 
+                    {...props} 
+                    onAccept={handleTermsAccept}
+                  />
+                )}
+              </Stack.Screen>
+              <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+              <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
+            </>
+          ) : !isOnboardingDone ? (
             // Onboarding akışı
             <Stack.Screen name="Onboarding">
               {(props) => (
@@ -75,6 +102,9 @@ const AppNavigator = () => {
               <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
               <Stack.Screen name="PhotoEdit" component={PhotoEditScreen} />
               <Stack.Screen name="RealTimeScreen" component={RealTimeScreen} />
+              <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+              <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
             </>
           )}
         </Stack.Navigator>

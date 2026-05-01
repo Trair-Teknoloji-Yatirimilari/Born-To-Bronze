@@ -36,6 +36,8 @@ import * as FileSystem from "expo-file-system";
 import DeviceInfo from "react-native-device-info";
 import Share from "react-native-share";
 import Dialog from "../components/Dialog";
+import ProductSlider from "../components/ProductSlider";
+import BeforeAfterSlider from "../components/BeforeAfterSlider";
 
 // Fırça boyutu için sabitleri güncelliyoruz
 const MIN_BRUSH_RADIUS = 5;
@@ -295,7 +297,7 @@ const PhotoEditScreen = () => {
     setStdAlertMessage(message || "");
     setStdAlertVisible(true);
   };
-  const [step, setStep] = useState(0); // 0: Fotoğraf seçme, 1: Alan Seçme, 2: Ürün seçme, 3: Bronzlaştır
+  const [step, setStep] = useState(0); // 0: Fotoğraf seçme, 1: Çizim + Ürün Seçimi (slider), 2: Sonuç
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [paths, setPaths] = useState([]); // { points: Point[], brush: number }
@@ -325,10 +327,8 @@ const PhotoEditScreen = () => {
   }); // Container position
   const [resultImage, setResultImage] = useState(null);
   const [resultImageId, setResultImageId] = useState(null); // Paylaş için gerekli
-  const [showOriginal, setShowOriginal] = useState(false); // Before/After kontrolü
   const paintedRef = useRef(new Set()); // Boyanmış grid anahtarları
   const productAnimationValue = useRef(new Animated.Value(0)).current;
-  const originalImageOpacity = useRef(new Animated.Value(0)).current;
 
   // Benzer fotoğraflar için state'ler
   const [similarPhotos, setSimilarPhotos] = useState([]);
@@ -336,6 +336,8 @@ const PhotoEditScreen = () => {
   const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
   const modalOpacity = useRef(new Animated.Value(0)).current;
   const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [discountCode, setDiscountCode] = useState(null);
+  const [discountModalVisible, setDiscountModalVisible] = useState(false);
   const [PRODUCTS, setPRODUCTS] = useState([]);
   const [imageLoading, setImageLoading] = useState(false); // Fotoğraf yükleniyor mu?
 
@@ -350,7 +352,7 @@ const PhotoEditScreen = () => {
 
   // Bottom Tab Bar kontrolü - çizim aşamasında gizle
   useEffect(() => {
-    if (step === 1 || step === 2) {
+    if (step === 1) {
       // Çizim ve ürün seçimi aşamasında tab bar'ı gizle ve status bar'ı gizle
       navigation.setOptions({
         tabBarStyle: { display: "none" },
@@ -382,14 +384,14 @@ const PhotoEditScreen = () => {
 
   // Result ekranında benzer fotoğrafları yükle
   useEffect(() => {
-    if (step === 3 && selectedProduct?.id) {
+    if (step === 2 && selectedProduct?.id && resultImage) {
       fetchSimilarPhotos(selectedProduct.id, resultImageId);
     }
-  }, [step, selectedProduct?.id, resultImageId]);
+  }, [step, selectedProduct?.id, resultImageId, resultImage]);
 
-  // Ürün seçimi ekranı animasyonu
+  // Ürün seçimi ekranı animasyonu - ARTIK KULLANILMIYOR (slider ile değiştirildi)
   useEffect(() => {
-    if (step === 2) {
+    if (step === 2 && resultImage) {
       Animated.timing(productAnimationValue, {
         toValue: 1,
         duration: 500,
@@ -398,26 +400,30 @@ const PhotoEditScreen = () => {
     } else {
       productAnimationValue.setValue(0);
     }
-  }, [step]);
+  }, [step, resultImage]);
 
-  // Before/After görüntü kontrolü
-  const showOriginalImage = () => {
-    setShowOriginal(true);
-    Animated.timing(originalImageOpacity, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const hideOriginalImage = () => {
-    Animated.timing(originalImageOpacity, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setShowOriginal(false);
-    });
+  // İndirim kodunu kopyala
+  const copyDiscountCode = async () => {
+    if (discountCode) {
+      // iOS ve Android için farklı yaklaşım
+      if (Platform.OS === 'ios') {
+        // iOS için Share API kullan
+        try {
+          await Share.open({
+            message: `İndirim Kodunuz: ${discountCode}\n\n%15 indirim kazandınız! 🎉\n\nAlışverişinizi tamamlamak için kodu kullanın.`,
+          });
+        } catch (error) {
+          // Kullanıcı iptal etti, sorun değil
+        }
+      } else {
+        // Android için basit alert
+        showAlert(
+          "İndirim Kodunuz 🎉", 
+          `${discountCode}\n\n%15 indirim kazandınız!\n\nKodu not alın ve alışverişinizi tamamlayın.`
+        );
+      }
+      setDiscountModalVisible(false);
+    }
   };
 
   // Paylaş fonksiyonu
@@ -444,10 +450,16 @@ const PhotoEditScreen = () => {
 
       const result = await response.json();
       if (result.success) {
-        showAlert(
-          "Paylaşım Başarılı",
-          "Fotoğrafınız başarıyla paylaşıldı. Topluluk, çalışmanızı şimdi görebilir."
-        );
+        // İndirim kodu varsa kaydet ve modal göster
+        if (result.discountCode) {
+          setDiscountCode(result.discountCode);
+          setDiscountModalVisible(true);
+        } else {
+          showAlert(
+            "Paylaşım Başarılı",
+            "Fotoğrafınız başarıyla paylaşıldı. Topluluk, çalışmanızı şimdi görebilir."
+          );
+        }
         // Paylaş sonrası benzer fotoğrafları yenile
         if (selectedProduct?.id) {
           fetchSimilarPhotos(selectedProduct.id, resultImageId);
@@ -884,7 +896,7 @@ const PhotoEditScreen = () => {
         const imageUrl = `${API_URL}${result.imageUrl}`;
         setResultImage(imageUrl);
         setResultImageId(result.imageId); // Paylaş için imageId'yi kaydet
-        setStep(3);
+        setStep(2); // Artık step 2 = result ekranı
       } else {
         showAlert("Hata", "Filtrelenmiş fotoğraf alınamadı.");
       }
@@ -901,55 +913,6 @@ const PhotoEditScreen = () => {
 
   const clearImage = () => {
     setConfirmClearImageVisible(true);
-  };
-
-  const ProductItem = ({ product }) => {
-    const handleSelect = () => {
-      setSelectedProduct(product);
-    };
-
-    const isSelected = selectedProduct?.id === product.id;
-
-    return (
-      <TouchableOpacity
-        style={[styles.productItem, isSelected && styles.selectedProductItem]}
-        onPress={handleSelect}
-        activeOpacity={0.8}
-      >
-        <LinearGradient
-          colors={isSelected ? ["#FFD700", "#FFA500"] : ["#FFFFFF", "#F5F5F5"]}
-          style={styles.productGradient}
-        >
-          <View style={styles.productImageContainer}>
-            <Image
-              source={{ uri: `${API_URL}${product.imageUrl}` }}
-              style={styles.productImage}
-            />
-            {isSelected && (
-              <View style={styles.selectedIndicator}>
-                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
-              </View>
-            )}
-          </View>
-          <View style={styles.productInfo}>
-            <Text
-              style={[styles.productName, isSelected && styles.selectedText]}
-              numberOfLines={2}
-            >
-              {product.name}
-            </Text>
-            <Text
-              style={[
-                styles.productPrice,
-                isSelected && styles.selectedPriceText,
-              ]}
-            >
-              {product.price} TL
-            </Text>
-          </View>
-        </LinearGradient>
-      </TouchableOpacity>
-    );
   };
 
   const pickImage = async () => {
@@ -1151,7 +1114,7 @@ const PhotoEditScreen = () => {
             </>
           )}
 
-          {step !== 0 && step !== 3 && (
+          {step !== 0 && step !== 2 && (
             <>
               <View style={styles.step1Container}>
                 <TouchableOpacity
@@ -1159,8 +1122,6 @@ const PhotoEditScreen = () => {
                   onPress={() => {
                     if (step === 1) {
                       clearImage();
-                    } else if (step === 2) {
-                      setStep(1);
                     }
                   }}
                 >
@@ -1171,33 +1132,19 @@ const PhotoEditScreen = () => {
                     styles.floatingTopNavNext,
                     (step === 1 &&
                       paths.length > 0 &&
-                      styles.floatingTopNavActive) ||
-                      (step === 2 &&
-                        selectedProduct &&
-                        styles.floatingTopNavActive),
+                      selectedProduct &&
+                      styles.floatingTopNavActive),
                   ]}
                   onPress={() => {
                     if (step === 1) {
-                      setStep(2);
-                    } else if (step === 2) {
                       applyBronzeEffect();
                     }
                   }}
                   disabled={
-                    (step === 1 && (loading || !image || paths.length === 0)) ||
-                    (step === 2 &&
-                      (loading ||
-                        !image ||
-                        paths.length === 0 ||
-                        !selectedProduct))
+                    step === 1 && (loading || !image || paths.length === 0 || !selectedProduct)
                   }
                 >
                   {step === 1 && (
-                    <Text style={styles.floatingTopNavText}>
-                      Çizimi Tamamla ve Bronzlaştırıcı Ürün Seç
-                    </Text>
-                  )}
-                  {step === 2 && (
                     <Text style={styles.floatingTopNavText}>
                       Bronz Efekti Uygula
                       {loading && (
@@ -1436,87 +1383,16 @@ const PhotoEditScreen = () => {
                   </>
                 )}
 
-                {step === 2 && (
-                  <Animated.View
-                    style={[
-                      styles.productsOverlay,
-                      {
-                        opacity: productAnimationValue,
-                        transform: [
-                          {
-                            translateY: productAnimationValue.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [100, 0],
-                            }),
-                          },
-                          {
-                            scale: productAnimationValue.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0.9, 1],
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
-                  >
-                    <Animated.View
-                      style={[
-                        styles.productsHeader,
-                        {
-                          opacity: productAnimationValue.interpolate({
-                            inputRange: [0, 0.5, 1],
-                            outputRange: [0, 0, 1],
-                          }),
-                          transform: [
-                            {
-                              translateY: productAnimationValue.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [20, 0],
-                              }),
-                            },
-                          ],
-                        },
-                      ]}
-                    >
-                      <Text style={styles.productsTitle}>Ürün Seçin</Text>
-                      <Text style={styles.productsSubtitle}>
-                        Bronzlaştırıcı kremlerin arasından birini seçin
-                      </Text>
-                    </Animated.View>
-                    <Animated.View
-                      style={[
-                        styles.productsScrollContainer,
-                        {
-                          opacity: productAnimationValue.interpolate({
-                            inputRange: [0, 0.3, 1],
-                            outputRange: [0, 0, 1],
-                          }),
-                          transform: [
-                            {
-                              translateY: productAnimationValue.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [30, 0],
-                              }),
-                            },
-                          ],
-                        },
-                      ]}
-                    >
-                      <FlatList
-                        data={PRODUCTS}
-                        renderItem={({ item }) => (
-                          <ProductItem product={item} />
-                        )}
-                        keyExtractor={(item) => item.id.toString()}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.productsListContent}
-                        ItemSeparatorComponent={() => (
-                          <View style={styles.productSeparator} />
-                        )}
-                      />
-                    </Animated.View>
-                  </Animated.View>
+                {/* ProductSlider - Step 1'de göster (çizim ekranında) */}
+                {image && step === 1 && PRODUCTS.length > 0 && (
+                  <View style={styles.productSliderContainer}>
+                    <ProductSlider
+                      products={PRODUCTS}
+                      selectedProduct={selectedProduct}
+                      onSelectProduct={setSelectedProduct}
+                      apiUrl={API_URL}
+                    />
+                  </View>
                 )}
               </View>
 
@@ -1532,7 +1408,7 @@ const PhotoEditScreen = () => {
               )}
             </>
           )}
-          {step === 3 && (
+          {step === 2 && resultImage && (
             <ScrollView
               contentContainerStyle={{
                 paddingBottom: 40,
@@ -1544,66 +1420,47 @@ const PhotoEditScreen = () => {
                 <TouchableOpacity
                   style={styles.floatingTopNavBack}
                   onPress={() => {
-                    setStep(2);
+                    setStep(1); // Artık step 1'e dönüyor (çizim ekranı)
                   }}
                 >
                   <Text style={styles.floatingTopNavText}>Geri Dön</Text>
                 </TouchableOpacity>
+                
+                {/* BeforeAfter Slider - Modern karşılaştırma */}
                 <View style={[styles.resultImageContainer]}>
-                  <Image
-                    source={{ uri: resultImage }}
-                    style={[styles.resultImage]}
-                    resizeMode="contain"
-                    onLoadStart={() => setImageLoading(true)}
-                    onLoadEnd={() => setImageLoading(false)}
-                  />
-                  {imageLoading && (
+                  {imageLoading ? (
                     <View style={styles.loadingOverlay}>
                       <ActivityIndicator size="large" color={COLORS.text} />
                       <Text style={styles.loadingText}>Fotoğraf yükleniyor...</Text>
                     </View>
+                  ) : (
+                    <BeforeAfterSlider
+                      beforeImage={image}
+                      afterImage={resultImage}
+                      containerStyle={styles.beforeAfterContainer}
+                      initialPosition={0.5}
+                      orientation="vertical"
+                    />
                   )}
-                  {/* Interactive Overlay */}
-                  <TouchableOpacity
-                    style={styles.resultImageOverlay}
-                    activeOpacity={1}
-                    onPressIn={showOriginalImage}
-                    onPressOut={hideOriginalImage}
-                  >
-                    {/* Original Image Overlay */}
-                    {showOriginal && (
-                      <Animated.View
-                        style={[
-                          styles.originalImageOverlay,
-                          { opacity: originalImageOpacity },
-                        ]}
-                      >
-                        <Image
-                          source={{ uri: image }}
-                          style={styles.resultImage}
-                          resizeMode="cover"
-                        />
-                        <View style={styles.originalImageLabel}>
-                          <Text style={styles.originalImageLabelText}>
-                            ORİJİNAL
-                          </Text>
-                        </View>
-                      </Animated.View>
-                    )}
-
-                    {/* Touch Instructions */}
-                    <View style={styles.touchInstructions}>
+                  
+                  {/* Slider Instructions - İlk kullanımda göster */}
+                  <View style={styles.sliderInstructions}>
+                    <LinearGradient
+                      colors={["rgba(0,0,0,0.7)", "rgba(0,0,0,0.5)"]}
+                      style={styles.sliderInstructionsGradient}
+                    >
                       <Ionicons
-                        name="hand-left"
+                        name="swap-vertical"
                         size={20}
-                        color={COLORS.text}
+                        color="#FFFFFF"
                       />
-                      <Text style={styles.touchInstructionsText}>
-                        Basılı tutarak orijinali gör
+                      <Text style={styles.sliderInstructionsText}>
+                        Kaydırarak karşılaştır
                       </Text>
-                    </View>
-                  </TouchableOpacity>
+                    </LinearGradient>
+                  </View>
                 </View>
+                
                 <View style={styles.resultButtonsContainer}>
                   <TouchableOpacity
                     style={[styles.resultButtons, styles.shareButton]}
@@ -1944,6 +1801,82 @@ const PhotoEditScreen = () => {
           } catch {}
         }}
       />
+
+      {/* İndirim Kodu Modalı */}
+      <Modal
+        visible={discountModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDiscountModalVisible(false)}
+      >
+        <View style={styles.discountModalBackdrop}>
+          <Animated.View style={styles.discountModalContainer}>
+            <LinearGradient
+              colors={["#FFD700", "#FFA500", "#FF8C00"]}
+              style={styles.discountModalGradient}
+            >
+              {/* Konfeti Efekti */}
+              <View style={styles.discountModalConfetti}>
+                <Text style={styles.discountModalConfettiText}>🎉</Text>
+                <Text style={styles.discountModalConfettiText}>✨</Text>
+                <Text style={styles.discountModalConfettiText}>🎁</Text>
+              </View>
+
+              {/* Başlık */}
+              <View style={styles.discountModalHeader}>
+                <Ionicons name="gift" size={60} color="#FFFFFF" />
+                <Text style={styles.discountModalTitle}>Tebrikler! 🎊</Text>
+                <Text style={styles.discountModalSubtitle}>
+                  Paylaşımınız için özel indirim kodunuz hazır!
+                </Text>
+              </View>
+
+              {/* İndirim Kodu */}
+              <View style={styles.discountCodeContainer}>
+                <Text style={styles.discountCodeLabel}>İndirim Kodunuz:</Text>
+                <View style={styles.discountCodeBox}>
+                  <Text style={styles.discountCodeText}>{discountCode}</Text>
+                </View>
+                <Text style={styles.discountCodeInfo}>
+                  %15 indirim kazandınız! 🎁
+                </Text>
+              </View>
+
+              {/* Butonlar */}
+              <View style={styles.discountModalButtons}>
+                <TouchableOpacity
+                  style={styles.discountCopyButton}
+                  onPress={copyDiscountCode}
+                >
+                  <Ionicons name="share-social" size={20} color="#FFFFFF" />
+                  <Text style={styles.discountCopyButtonText}>Kodu Paylaş</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.discountShopButton}
+                  onPress={() => {
+                    setDiscountModalVisible(false);
+                    if (selectedProduct?.link) {
+                      Linking.openURL(selectedProduct.link);
+                    }
+                  }}
+                >
+                  <Ionicons name="cart" size={20} color="#FF8C00" />
+                  <Text style={styles.discountShopButtonText}>Alışverişe Başla</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Kapat Butonu */}
+              <TouchableOpacity
+                style={styles.discountCloseButton}
+                onPress={() => setDiscountModalVisible(false)}
+              >
+                <Text style={styles.discountCloseButtonText}>Daha Sonra</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -2158,78 +2091,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  productItem: {
-    width: 140,
-    height: 180,
-    borderRadius: 12,
-    overflow: "hidden",
-    marginVertical: 10,
-  },
-  selectedProductItem: {
-    transform: [{ scale: 1.05 }],
-  },
-  productImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "contain",
-  },
-  productName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.text,
-    textAlign: "center",
-    marginTop: 2,
-  },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: COLORS.active,
-    textAlign: "center",
-    marginTop: 2,
-  },
-  productGradient: {
-    flex: 1,
-    borderRadius: 10,
-    padding: 5,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  productImageContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 10,
-    position: "relative",
-    overflow: "hidden",
-  },
-  selectedIndicator: {
-    position: "absolute",
-    top: 5,
-    right: 5,
-    backgroundColor: COLORS.active,
-    borderRadius: 15,
-    width: 30,
-    height: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: COLORS.background,
-  },
-  productInfo: {
-    marginTop: 5,
-    alignItems: "center",
-  },
-  selectedText: {
-    color: COLORS.active,
-  },
-  selectedPriceText: {
-    color: COLORS.active,
-  },
-
   loadingOverlay: {
     flex: 1,
     backgroundColor: "rgba(92, 58, 33, 0.7)",
@@ -2251,61 +2112,38 @@ const styles = StyleSheet.create({
     aspectRatio: 9 / 16, // Crop edilmiş fotoğrafın exact ratio'su
     borderRadius: 10,
     overflow: "hidden",
-    contentFit: "contain",
+  },
+  beforeAfterContainer: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 10,
+  },
+  sliderInstructions: {
+    position: "absolute",
+    bottom: 20,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 200,
+    pointerEvents: "none",
+  },
+  sliderInstructionsGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  sliderInstructionsText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
   resultImage: {
     width: "100%",
     aspectRatio: 9 / 16, // Crop edilmiş fotoğrafın exact ratio'su
     borderRadius: 10,
-  },
-  resultImageOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "flex-end",
-    alignItems: "center",
-    paddingBottom: 20,
-  },
-  originalImageOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  originalImageLabel: {
-    position: "absolute",
-    top: 20,
-    left: "40%",
-    backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  originalImageLabelText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 12,
-    letterSpacing: 1,
-  },
-  touchInstructions: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 8,
-  },
-  touchInstructionsText: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: "500",
   },
   resultButtonsContainer: {
     gap: 3,
@@ -2516,54 +2354,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
-  productsOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(244, 235, 208, 0.95)",
-    backdropFilter: "blur(10px)",
-    zIndex: 100,
-    padding: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  productsHeader: {
-    alignItems: "center",
-    marginBottom: 30,
-    paddingHorizontal: 20,
-  },
-  productsTitle: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: COLORS.text,
-    marginBottom: 8,
-    textShadowColor: "rgba(0,0,0,0.1)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  productsSubtitle: {
-    fontSize: 18,
-    color: COLORS.text,
-    textAlign: "center",
-    opacity: 0.8,
-    fontWeight: "500",
-  },
-  productsScrollContainer: {
-    width: "100%",
-    maxHeight: 220,
-    borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.3)",
-    paddingVertical: 10,
-  },
-  productsListContent: {
-    paddingHorizontal: 20,
-    alignItems: "center",
-  },
-  productSeparator: {
-    width: 15,
-  },
   shareModalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -2623,6 +2413,150 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: "700",
     fontSize: 16,
+  },
+  // İndirim Kodu Modal Stilleri
+  discountModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  discountModalContainer: {
+    width: "90%",
+    maxWidth: 400,
+    borderRadius: 24,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  discountModalGradient: {
+    padding: 30,
+    alignItems: "center",
+  },
+  discountModalConfetti: {
+    position: "absolute",
+    top: 10,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    zIndex: 1,
+  },
+  discountModalConfettiText: {
+    fontSize: 30,
+    opacity: 0.7,
+  },
+  discountModalHeader: {
+    alignItems: "center",
+    marginBottom: 30,
+  },
+  discountModalTitle: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginTop: 15,
+    marginBottom: 10,
+    textShadowColor: "rgba(0,0,0,0.3)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  discountModalSubtitle: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    textAlign: "center",
+    opacity: 0.95,
+    lineHeight: 22,
+  },
+  discountCodeContainer: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 25,
+  },
+  discountCodeLabel: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    marginBottom: 10,
+    opacity: 0.9,
+  },
+  discountCodeBox: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  discountCodeText: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#FF8C00",
+    letterSpacing: 2,
+  },
+  discountCodeInfo: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  discountModalButtons: {
+    width: "100%",
+    gap: 12,
+  },
+  discountCopyButton: {
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 15,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  discountCopyButtonText: {
+    color: "#FF8C00",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  discountShopButton: {
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 15,
+    borderRadius: 12,
+    gap: 8,
+  },
+  discountShopButtonText: {
+    color: "#FF8C00",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  discountCloseButton: {
+    marginTop: 15,
+    paddingVertical: 10,
+  },
+  discountCloseButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    opacity: 0.8,
+  },
+  // ProductSlider Container - Step 1'de alt kısımda gösterilecek
+  productSliderContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
 });
 

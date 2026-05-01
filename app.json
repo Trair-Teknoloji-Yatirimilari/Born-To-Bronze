@@ -16,10 +16,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bronzecream.app",
+      "bundleIdentifier": "com.borntobronze.ios",
       "infoPlist": {
-        "NSCameraUsageDescription": "Eda uygulamasının kameranıza erişmesine izin verin",
-        "NSPhotoLibraryUsageDescription": "Eda uygulamasının fotoğraflarınıza erişmesine izin verin",
+        "NSCameraUsageDescription": "Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde gerçek zamanlı olarak test edebilmeniz için kamera erişimine ihtiyacımız var. Kamera görüntüleri yalnızca cihazınızda işlenir ve sunucularımıza gönderilmez.",
+        "NSPhotoLibraryUsageDescription": "Fotoğraflarınızı seçerek Eda Taşpınar bronzlaştırıcı ürünlerini test edebilmeniz için galeri erişimine ihtiyacımız var. Seçtiğiniz fotoğraflar yalnızca cihazınızda işlenir.",
+        "NSPhotoLibraryAddUsageDescription": "Düzenlediğiniz fotoğrafları galerinize kaydedebilmeniz için izin gerekiyor. Kaydetmek istediğiniz fotoğraflar sadece sizin kontrolünüzde olacak.",
+        "NSMicrophoneUsageDescription": "Eda uygulaması mikrofon kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
+        "NSFaceIDUsageDescription": "Eda uygulaması Face ID kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
+        "NSLocationWhenInUseUsageDescription": "Eda uygulaması konum bilgisi kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "buildNumber": "13"
@@ -34,7 +38,13 @@
         "CAMERA",
         "android.permission.CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES"
+      ],
+      "blockedPermissions": [
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -55,7 +65,8 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Eda uygulamasının kameranıza erişmesine izin verin"
+          "cameraPermissionText": "Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde gerçek zamanlı olarak test edebilmeniz için kamera erişimine ihtiyacımız var. Kamera görüntüleri yalnızca cihazınızda işlenir ve sunucularımıza gönderilmez.",
+          "enableMicrophonePermission": false
         }
       ],
       [

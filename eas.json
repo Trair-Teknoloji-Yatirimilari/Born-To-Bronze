@@ -22,7 +22,11 @@
         "buildConfiguration": "Release"
       }
     },
-    "production": {}
+    "production": {
+      "ios": {
+        "bundleIdentifier": "com.borntobronze.ios"
+      }
+    }
   },
   "submit": {
     "production": {},

@@ -8,16 +8,24 @@ import {
   Animated,
   Dimensions,
   Easing,
+  TouchableOpacity,
 } from "react-native";
 import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { useToast } from "../context/ToastContext";
 import AnimatedLogo from "../components/AnimatedLogo";
 import SharedPhotos from "../components/SharedPhotos";
+import { getErrorMessage, checkInternetConnection } from "../utils/errorHandler";
 
 
 const WelcomeScreen = () => {
+  const navigation = useNavigation();
+  const { showError, showSuccess } = useToast();
   const [sharedPhotos, setSharedPhotos] = useState([]);
   const [mySharedPhotos, setMySharedPhotos] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   const API_URL = "https://kafanagoreya.yumru.dev";
 
   // useEffect(() => {
@@ -39,11 +47,29 @@ const WelcomeScreen = () => {
   useEffect(() => {
     const fetchSharedPhotos = async () => {
       try {
+        setIsLoading(true);
+        
+        // İnternet kontrolü
+        const isConnected = await checkInternetConnection();
+        if (!isConnected) {
+          showError("İnternet bağlantınızı kontrol edin");
+          return;
+        }
+
         const response = await fetch(`${API_URL}/api/public/phone/share-photo`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         setSharedPhotos(data.data);
       } catch (e) {
-        console.error(e);
+        console.error("Shared photos fetch error:", e);
+        const errorMessage = getErrorMessage(e);
+        showError(errorMessage);
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchSharedPhotos();
@@ -144,6 +170,14 @@ const WelcomeScreen = () => {
       source={require("../assets/welcome-bg.png")}
       style={styles.background}
     >
+      {/* Ayarlar Butonu */}
+      <TouchableOpacity
+        style={styles.settingsButton}
+        onPress={() => navigation.navigate("Settings")}
+      >
+        <Ionicons name="settings-outline" size={28} color={COLORS.text} />
+      </TouchableOpacity>
+
       <SharedPhotos apiUrl={API_URL} />
       {/* Sonsuz kayan fotoğraflar */}
       {renderInfiniteSlider()}
@@ -165,6 +199,23 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
+  },
+  settingsButton: {
+    position: "absolute",
+    top: 60,
+    right: 20,
+    zIndex: 100,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.button,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   gradient: {
     flex: 1,

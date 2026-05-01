@@ -5,6 +5,7 @@ import AppNavigator from "./src/navigation/AppNavigator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as Sentry from "@sentry/react-native";
 import { NotificationProvider } from "./src/context/NotificationContext";
+import { ToastProvider } from "./src/context/ToastContext";
 import * as Notifications from "expo-notifications";
 
 Sentry.init({
@@ -34,11 +35,13 @@ Notifications.setNotificationHandler({
 
 export default Sentry.wrap(function App() {
   return (
-    <NotificationProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <StatusBar style="light" />
-        <AppNavigator />
-      </GestureHandlerRootView>
-    </NotificationProvider>
+    <ToastProvider>
+      <NotificationProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <StatusBar style="light" />
+          <AppNavigator />
+        </GestureHandlerRootView>
+      </NotificationProvider>
+    </ToastProvider>
   );
 });
