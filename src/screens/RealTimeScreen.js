@@ -26,7 +26,7 @@ import {
   useSkiaFrameProcessor,
   runAtTargetFps,
 } from "react-native-vision-camera";
-import { useIsFocused } from "@react-navigation/core";
+import { useIsFocused, useNavigation } from "@react-navigation/core";
 import { useAppState } from "@react-native-community/hooks";
 import { useFaceDetector } from "react-native-vision-camera-face-detector";
 import { ClipOp, Skia, TileMode, BlendMode } from "@shopify/react-native-skia";

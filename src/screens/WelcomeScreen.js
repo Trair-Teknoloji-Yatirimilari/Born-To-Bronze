@@ -211,7 +211,7 @@ const WelcomeScreen = () => {
 
             <TouchableOpacity
               style={styles.secondaryButton}
-              onPress={() => navigation.navigate("RealTime")}
+              onPress={() => navigation.navigate("RealTimeScreen")}
               activeOpacity={0.8}
             >
               <View style={styles.secondaryButtonContent}>
