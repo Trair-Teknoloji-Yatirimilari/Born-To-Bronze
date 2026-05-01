@@ -14,8 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../constants/theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const ITEM_WIDTH = 120;
-const ITEM_SPACING = 12;
+const ITEM_WIDTH = 140; // 120'den 140'a çıkardım
+const ITEM_SPACING = 16; // 12'den 16'ya çıkardım
 
 const ProductSlider = ({ products, selectedProduct, onSelectProduct, apiUrl }) => {
   const flatListRef = useRef(null);
@@ -85,13 +85,15 @@ const ProductSlider = ({ products, selectedProduct, onSelectProduct, apiUrl }) =
               </View>
             )}
 
-            {/* Ürün Resmi */}
-            <View style={styles.productImageContainer}>
-              <Image
-                source={{ uri: `${apiUrl}${item.imageUrl}` }}
-                style={styles.productImage}
-                resizeMode="cover"
+            {/* Ürün Renk Önizlemesi */}
+            <View style={styles.colorPreviewContainer}>
+              <View
+                style={[
+                  styles.colorPreview,
+                  { backgroundColor: item.filterColor || "#D4AF37" },
+                ]}
               />
+              <Text style={styles.colorLabel}>Renk Tonu</Text>
             </View>
 
             {/* Ürün Bilgisi */}
@@ -212,8 +214,9 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   productGradient: {
-    padding: 8,
+    padding: 12,
     alignItems: "center",
+    minHeight: 180,
   },
   selectedBadge: {
     position: "absolute",
@@ -222,6 +225,28 @@ const styles = StyleSheet.create({
     zIndex: 10,
     backgroundColor: "rgba(0, 0, 0, 0.3)",
     borderRadius: 12,
+  },
+  colorPreviewContainer: {
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  colorPreview: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  colorLabel: {
+    fontSize: 10,
+    color: "#666",
+    marginTop: 6,
+    fontWeight: "600",
   },
   productImageContainer: {
     width: ITEM_WIDTH - 16,
@@ -237,28 +262,30 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     alignItems: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
   },
   productName: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
     color: COLORS.text,
     textAlign: "center",
     marginBottom: 4,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   selectedProductName: {
     color: "#FFFFFF",
-    fontWeight: "700",
+    fontWeight: "800",
+    fontSize: 14,
   },
   productPrice: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: COLORS.text,
   },
   selectedProductPrice: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: "800",
   },
   glowEffect: {
     position: "absolute",

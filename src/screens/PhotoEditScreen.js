@@ -297,9 +297,10 @@ const PhotoEditScreen = () => {
     setStdAlertMessage(message || "");
     setStdAlertVisible(true);
   };
-  const [step, setStep] = useState(0); // 0: Fotoğraf seçme, 1: Çizim + Ürün Seçimi (slider), 2: Sonuç
+  const [step, setStep] = useState(1); // Direkt çizim ekranından başla (galeri açılacak)
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true); // İlk galeri açılışı için
   const [paths, setPaths] = useState([]); // { points: Point[], brush: number }
   const [currentPath, setCurrentPath] = useState({
     points: [],
@@ -340,6 +341,7 @@ const PhotoEditScreen = () => {
   const [discountModalVisible, setDiscountModalVisible] = useState(false);
   const [PRODUCTS, setPRODUCTS] = useState([]);
   const [imageLoading, setImageLoading] = useState(false); // Fotoğraf yükleniyor mu?
+  const [showInstructions, setShowInstructions] = useState(true); // İlk kullanım talimatları
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -348,6 +350,18 @@ const PhotoEditScreen = () => {
       setPRODUCTS(data.products);
     };
     fetchProducts();
+  }, []);
+
+  // Ekran açıldığında otomatik galeriyi aç
+  useEffect(() => {
+    const openGalleryOnMount = async () => {
+      // Sadece ilk açılışta ve fotoğraf seçilmemişse
+      if (!image && initialLoading) {
+        setInitialLoading(false);
+        await pickImage();
+      }
+    };
+    openGalleryOnMount();
   }, []);
 
   // Bottom Tab Bar kontrolü - çizim aşamasında gizle
@@ -894,6 +908,8 @@ const PhotoEditScreen = () => {
       if (result.success) {
         // Görüntüyü göster
         const imageUrl = `${API_URL}${result.imageUrl}`;
+        console.log("✅ Bronzlaştırılmış fotoğraf URL:", imageUrl);
+        console.log("📸 Orijinal fotoğraf URL:", image);
         setResultImage(imageUrl);
         setResultImageId(result.imageId); // Paylaş için imageId'yi kaydet
         setStep(2); // Artık step 2 = result ekranı
@@ -991,11 +1007,13 @@ const PhotoEditScreen = () => {
         setSelectedProduct(null);
         setStep(1);
       } else {
-
+        // Kullanıcı galeriyi iptal etti, home'a dön
+        navigation.goBack();
       }
     } catch (error) {
       console.error("Galeri hatası:", error);
       showAlert("Hata", "Galeri açılırken hata oluştu: " + error.message);
+      navigation.goBack();
     }
   };
 
@@ -1078,45 +1096,52 @@ const PhotoEditScreen = () => {
           colors={["rgba(244, 235, 208, 0.5)", "rgba(244, 235, 208, 1)"]}
           style={styles.container}
         >
-          {step === 0 && (
-            <>
-              <View style={styles.step0Container}>
-                <Text style={styles.title}>Fotoğraf Seç</Text>
-                <Text style={styles.desc}>
-                  Bronzlaştırıcı etkileri denemek için hemen bir fotoğraf seçmen
-                  yeterli!
-                </Text>
-                <View style={styles.actions}>
-                  <Text style={styles.actionText}>
-                    Yüz veya vücut bölgelerine bronzlaştırıcı krem uygulamak
-                    için hemen{" "}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={takePhoto}
-                  >
-                    <Ionicons name="camera" size={24} color={COLORS.text} />
-                    <Text>Kamerayı açın</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.actionText}>
-                    veya hızlıca dilediğiniz bir fotoğrafı
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={pickImage}
-                  >
-                    <Ionicons name="image" size={24} color={COLORS.text} />
-                    <Text>Galeriden seçin</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.actionText}>ve değişimi görün!</Text>
-                </View>
-              </View>
-            </>
+          {/* Step 0 ekranı kaldırıldı - direkt galeri açılıyor */}
+          
+          {/* Galeri açılırken loading göster */}
+          {!image && initialLoading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#D4AF37" />
+              <Text style={styles.loadingText}>Galeri açılıyor...</Text>
+            </View>
           )}
 
-          {step !== 0 && step !== 2 && (
+          {step !== 0 && step !== 2 && image && (
             <>
               <View style={styles.step1Container}>
+                {/* Kullanıcı Talimatları */}
+                {showInstructions && (
+                  <View style={styles.instructionsContainer}>
+                    <LinearGradient
+                      colors={["#D4AF37", "#FFD700"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.instructionsGradient}
+                    >
+                      <View style={styles.instructionsContent}>
+                        <Text style={styles.instructionsTitle}>
+                          ✏️ Nasıl Kullanılır?
+                        </Text>
+                        <Text style={styles.instructionsText}>
+                          1. Parmağınızla bronzlaştırmak istediğiniz bölgeyi çizin
+                        </Text>
+                        <Text style={styles.instructionsText}>
+                          2. Alttaki slider'dan bir ürün seçin
+                        </Text>
+                        <Text style={styles.instructionsText}>
+                          3. "Bronz Efekti Uygula" butonuna basın
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.instructionsCloseButton}
+                        onPress={() => setShowInstructions(false)}
+                      >
+                        <Ionicons name="close" size={20} color="#000" />
+                      </TouchableOpacity>
+                    </LinearGradient>
+                  </View>
+                )}
+
                 <TouchableOpacity
                   style={styles.floatingTopNavBack}
                   onPress={() => {
@@ -1426,38 +1451,23 @@ const PhotoEditScreen = () => {
                   <Text style={styles.floatingTopNavText}>Geri Dön</Text>
                 </TouchableOpacity>
                 
-                {/* BeforeAfter Slider - Modern karşılaştırma */}
-                <View style={[styles.resultImageContainer]}>
-                  {imageLoading ? (
-                    <View style={styles.loadingOverlay}>
-                      <ActivityIndicator size="large" color={COLORS.text} />
-                      <Text style={styles.loadingText}>Fotoğraf yükleniyor...</Text>
-                    </View>
-                  ) : (
-                    <BeforeAfterSlider
-                      beforeImage={image}
-                      afterImage={resultImage}
-                      containerStyle={styles.beforeAfterContainer}
-                      initialPosition={0.5}
-                      orientation="vertical"
+                {/* Önce/Sonra Karşılaştırma - Yan Yana */}
+                <View style={styles.comparisonContainer}>
+                  <View style={styles.comparisonImageWrapper}>
+                    <Text style={styles.comparisonLabel}>Önce</Text>
+                    <Image
+                      source={{ uri: image }}
+                      style={styles.comparisonImage}
+                      resizeMode="cover"
                     />
-                  )}
-                  
-                  {/* Slider Instructions - İlk kullanımda göster */}
-                  <View style={styles.sliderInstructions}>
-                    <LinearGradient
-                      colors={["rgba(0,0,0,0.7)", "rgba(0,0,0,0.5)"]}
-                      style={styles.sliderInstructionsGradient}
-                    >
-                      <Ionicons
-                        name="swap-vertical"
-                        size={20}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.sliderInstructionsText}>
-                        Kaydırarak karşılaştır
-                      </Text>
-                    </LinearGradient>
+                  </View>
+                  <View style={styles.comparisonImageWrapper}>
+                    <Text style={styles.comparisonLabel}>Sonra</Text>
+                    <Image
+                      source={{ uri: resultImage }}
+                      style={styles.comparisonImage}
+                      resizeMode="cover"
+                    />
                   </View>
                 </View>
                 
@@ -1754,7 +1764,7 @@ const PhotoEditScreen = () => {
           setPaths([]);
           setCurrentPath({ points: [], brush: DEFAULT_BRUSH_RADIUS });
           setSelectedProduct(null);
-          setStep(0);
+          navigation.goBack(); // Home'a dön
         }}
       />
 
@@ -1887,6 +1897,59 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 15,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: COLORS.text,
+    ...FONTS.medium,
+  },
+  instructionsContainer: {
+    position: "absolute",
+    top: 80,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  instructionsGradient: {
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  instructionsContent: {
+    gap: 8,
+    paddingRight: 30,
+  },
+  instructionsTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: 4,
+  },
+  instructionsText: {
+    fontSize: 13,
+    color: "#000",
+    lineHeight: 18,
+  },
+  instructionsCloseButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   step0Container: {
     flex: 1,
@@ -2109,9 +2172,45 @@ const styles = StyleSheet.create({
   resultImageContainer: {
     position: "relative",
     width: "100%",
-    aspectRatio: 9 / 16, // Crop edilmiş fotoğrafın exact ratio'su
+    maxHeight: 600,
+    aspectRatio: 9 / 16,
     borderRadius: 10,
     overflow: "hidden",
+    backgroundColor: "#000",
+  },
+  comparisonContainer: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 10,
+    marginVertical: 20,
+  },
+  comparisonImageWrapper: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#000",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  comparisonLabel: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    zIndex: 10,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    color: "#FFD700",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  comparisonImage: {
+    width: "100%",
+    aspectRatio: 9 / 16,
   },
   beforeAfterContainer: {
     width: "100%",

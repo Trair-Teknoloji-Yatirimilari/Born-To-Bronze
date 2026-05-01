@@ -19,6 +19,7 @@ const BeforeAfterSlider = ({
   containerStyle,
   initialPosition = 0.5, // 0-1 arası, 0.5 = ortada
   orientation = "vertical", // "vertical" veya "horizontal"
+  onImageError,
 }) => {
   const [sliderPosition, setSliderPosition] = useState(initialPosition);
   const pan = useRef(new Animated.Value(initialPosition)).current;
@@ -140,12 +141,21 @@ const BeforeAfterSlider = ({
   };
 
   return (
-    <View style={[styles.container, containerStyle]} onLayout={onLayout}>
+    <View 
+      style={[styles.container, containerStyle]} 
+      onLayout={onLayout}
+      {...panResponder.panHandlers}
+    >
       {/* After Image (Background) */}
       <Image
         source={{ uri: afterImage }}
         style={styles.image}
         resizeMode="cover"
+        onError={(error) => {
+          console.error("❌ After image load error:", error.nativeEvent.error);
+          onImageError && onImageError(error);
+        }}
+        onLoad={() => console.log("✅ After image loaded:", afterImage)}
       />
 
       {/* Before Image (Clipped) */}
@@ -162,6 +172,11 @@ const BeforeAfterSlider = ({
           source={{ uri: beforeImage }}
           style={styles.image}
           resizeMode="cover"
+          onError={(error) => {
+            console.error("❌ Before image load error:", error.nativeEvent.error);
+            onImageError && onImageError(error);
+          }}
+          onLoad={() => console.log("✅ Before image loaded:", beforeImage)}
         />
 
         {/* Label: BEFORE */}
@@ -214,7 +229,6 @@ const BeforeAfterSlider = ({
             ? styles.sliderLineHorizontal
             : styles.sliderLineVertical,
         ]}
-        {...panResponder.panHandlers}
       >
         <LinearGradient
           colors={["#FFD700", "#FFFFFF", "#FFD700"]}
