@@ -187,7 +187,49 @@ const WelcomeScreen = () => {
         style={styles.gradient}
       >
         <View style={styles.container}>
-          <AnimatedLogo width={1500} height={1500} />
+          <View style={styles.logoContainer}>
+            <AnimatedLogo width={550} height={550} />
+          </View>
+          
+          {/* Ana Butonlar */}
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => navigation.navigate("PhotoEdit")}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={["#D4AF37", "#FFD700", "#D4AF37"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.buttonGradient}
+              >
+                <Ionicons name="images" size={32} color="#000" />
+                <Text style={styles.primaryButtonText}>Fotoğraf Yükle</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => navigation.navigate("RealTime")}
+              activeOpacity={0.8}
+            >
+              <View style={styles.secondaryButtonContent}>
+                <Ionicons name="camera" size={32} color="#D4AF37" />
+                <Text style={styles.secondaryButtonText}>Gerçek Zamanlı</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Alt Bilgi */}
+          <View style={styles.infoContainer}>
+            <Text style={styles.infoText}>
+              ✨ Fotoğrafınıza bronzlaştırıcı efekti uygulayın
+            </Text>
+            <Text style={styles.infoText}>
+              🎁 Paylaşarak indirim kodu kazanın
+            </Text>
+          </View>
         </View>
       </LinearGradient>
     </ImageBackground>
@@ -226,7 +268,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 40,
+  },
+  logoContainer: {
+    marginBottom: 30,
+    marginTop: -20,
   },
   subtitle: {
     ...FONTS.regular,
@@ -264,6 +311,80 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     alignItems: "center",
     justifyContent: "center",
+  },
+  actionButtonsContainer: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryButton: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#D4AF37",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  buttonGradient: {
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  primaryButtonText: {
+    ...FONTS.bold,
+    fontSize: 15,
+    color: "#000",
+    textAlign: "center",
+  },
+  primaryButtonSubtext: {
+    ...FONTS.regular,
+    fontSize: 12,
+    color: "#333",
+  },
+  secondaryButton: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderWidth: 2,
+    borderColor: "#D4AF37",
+    overflow: "hidden",
+  },
+  secondaryButtonContent: {
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  secondaryButtonText: {
+    ...FONTS.bold,
+    fontSize: 15,
+    color: "#D4AF37",
+    textAlign: "center",
+  },
+  secondaryButtonSubtext: {
+    ...FONTS.regular,
+    fontSize: 11,
+    color: "#FFF",
+    opacity: 0.8,
+  },
+  infoContainer: {
+    marginTop: 20,
+    alignItems: "center",
+    gap: 6,
+  },
+  infoText: {
+    ...FONTS.regular,
+    fontSize: 12,
+    color: "#FFF",
+    opacity: 0.85,
+    textAlign: "center",
   },
 });
 
