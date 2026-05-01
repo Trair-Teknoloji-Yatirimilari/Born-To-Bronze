@@ -26,7 +26,7 @@
         "NSLocationWhenInUseUsageDescription": "Eda uygulaması konum bilgisi kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "13"
+      "buildNumber": "14"
     },
     "android": {
       "adaptiveIcon": {
@@ -58,7 +58,7 @@
             "minSdkVersion": 26
           },
           "ios": {
-            "deploymentTarget": "15.5"
+            "deploymentTarget": "16.0"
           }
         }
       ],
@@ -81,8 +81,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "2043acd9-9368-4c64-b5c8-cecf0a1b52bb"
+        "projectId": "399420b2-d896-4463-a15f-c956f1700500"
       }
-    }
+    },
+    "owner": "trairx"
   }
 }

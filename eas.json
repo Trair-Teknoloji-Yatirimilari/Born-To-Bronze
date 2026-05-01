@@ -24,8 +24,11 @@
     },
     "production": {
       "ios": {
-        "bundleIdentifier": "com.borntobronze.ios"
-      }
+        "image": "latest",
+        "resourceClass": "m-medium",
+        "buildConfiguration": "Release"
+      },
+      "channel": "production"
     }
   },
   "submit": {
