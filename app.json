@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Eda",
+    "name": "Born To Bronze",
     "slug": "bronze-cream",
-    "version": "1.0.12",
+    "version": "1.0.14",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/logo.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F4EBD0"
+      "backgroundColor": "#FFFFFF"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -18,20 +18,20 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.borntobronze.ios",
       "infoPlist": {
-        "NSCameraUsageDescription": "Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde gerçek zamanlı olarak test edebilmeniz için kamera erişimine ihtiyacımız var. Kamera görüntüleri yalnızca cihazınızda işlenir ve sunucularımıza gönderilmez.",
-        "NSPhotoLibraryUsageDescription": "Fotoğraflarınızı seçerek Eda Taşpınar bronzlaştırıcı ürünlerini test edebilmeniz için galeri erişimine ihtiyacımız var. Seçtiğiniz fotoğraflar yalnızca cihazınızda işlenir.",
-        "NSPhotoLibraryAddUsageDescription": "Düzenlediğiniz fotoğrafları galerinize kaydedebilmeniz için izin gerekiyor. Kaydetmek istediğiniz fotoğraflar sadece sizin kontrolünüzde olacak.",
-        "NSMicrophoneUsageDescription": "Eda uygulaması mikrofon kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
-        "NSFaceIDUsageDescription": "Eda uygulaması Face ID kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
-        "NSLocationWhenInUseUsageDescription": "Eda uygulaması konum bilgisi kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
+        "NSCameraUsageDescription": "Born To Bronze uygulamasında Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde gerçek zamanlı test edebilmeniz için kamera erişimi gereklidir. Kamera görüntüleri yalnızca cihazınızda işlenir ve sunucularımıza gönderilmez.",
+        "NSPhotoLibraryUsageDescription": "Born To Bronze uygulamasında fotoğraflarınızı seçerek Eda Taşpınar bronzlaştırıcı ürünlerini sanal olarak test edebilmeniz için galeri erişimi gereklidir. Seçtiğiniz fotoğraflar yalnızca cihazınızda işlenir.",
+        "NSPhotoLibraryAddUsageDescription": "Düzenlediğiniz fotoğrafları galerinize kaydedebilmeniz için izin gerekiyor. Kaydettiğiniz fotoğraflar yalnızca sizin kontrolünüzdedir.",
+        "NSMicrophoneUsageDescription": "Born To Bronze mikrofon kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
+        "NSFaceIDUsageDescription": "Born To Bronze Face ID kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
+        "NSLocationWhenInUseUsageDescription": "Born To Bronze konum bilgisi kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "14"
+      "buildNumber": "17"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
-        "backgroundColor": "#F4EBD0"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.bronzecream.app",
       "permissions": [
@@ -39,9 +39,17 @@
         "android.permission.CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "CAMERA",
+        "android.permission.CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES"
       ],
       "blockedPermissions": [
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
         "RECORD_AUDIO",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
@@ -65,7 +73,7 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde gerçek zamanlı olarak test edebilmeniz için kamera erişimine ihtiyacımız var. Kamera görüntüleri yalnızca cihazınızda işlenir ve sunucularımıza gönderilmez.",
+          "cameraPermissionText": "Born To Bronze uygulamasında Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde gerçek zamanlı test edebilmeniz için kamera erişimi gereklidir. Kamera görüntüleri yalnızca cihazınızda işlenir ve sunucularımıza gönderilmez.",
           "enableMicrophonePermission": false
         }
       ],
@@ -84,6 +92,12 @@
         "projectId": "399420b2-d896-4463-a15f-c956f1700500"
       }
     },
-    "owner": "trairx"
+    "owner": "trairx",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/399420b2-d896-4463-a15f-c956f1700500"
+    }
   }
 }

@@ -12,11 +12,13 @@ import {
   Modal,
   Animated,
   Platform,
-  ImageBackground,
   StatusBar,
   Linking,
-  SafeAreaView,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import Slider from "@react-native-community/slider";
 import * as ImagePicker from "expo-image-picker";
@@ -284,6 +286,7 @@ const getDeviceInfo = async () => {
 
 const PhotoEditScreen = () => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [stdAlertVisible, setStdAlertVisible] = useState(false);
   const [stdAlertTitle, setStdAlertTitle] = useState("");
   const [stdAlertMessage, setStdAlertMessage] = useState("");
@@ -1087,13 +1090,10 @@ const PhotoEditScreen = () => {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#F4EBD0" }}>
-      <ImageBackground
-        source={require("../assets/welcome-bg.png")}
-        style={styles.background}
-      >
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
+      <View style={styles.background}>
         <LinearGradient
-          colors={["rgba(244, 235, 208, 0.5)", "rgba(244, 235, 208, 1)"]}
+          colors={["rgba(244, 235, 208, 0.35)", "rgba(255, 255, 255, 1)"]}
           style={styles.container}
         >
           {/* Step 0 ekranı kaldırıldı - direkt galeri açılıyor */}
@@ -1704,7 +1704,7 @@ const PhotoEditScreen = () => {
             </View>
           </Modal>
         </LinearGradient>
-      </ImageBackground>
+      </View>
       {eraseMode && (
         <View style={{
           position: 'absolute',
@@ -1894,6 +1894,7 @@ const PhotoEditScreen = () => {
 const styles = StyleSheet.create({
   background: {
     flex: 1,
+    backgroundColor: "#FFFFFF",
   },
   container: {
     flex: 1,

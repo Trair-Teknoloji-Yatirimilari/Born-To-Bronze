@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ImageBackground,
   Image,
   Animated,
   Dimensions,
@@ -14,19 +13,24 @@ import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useToast } from "../context/ToastContext";
 import AnimatedLogo from "../components/AnimatedLogo";
 import SharedPhotos from "../components/SharedPhotos";
-import { getErrorMessage, checkInternetConnection } from "../utils/errorHandler";
 
 
 const WelcomeScreen = () => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { showError, showSuccess } = useToast();
   const [sharedPhotos, setSharedPhotos] = useState([]);
   const [mySharedPhotos, setMySharedPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const API_URL = "https://bronze-api.trair.com.tr";
+
+  // Ekran boyutuna göre logo boyutu (responsive)
+  const { width: screenW, height: screenH } = Dimensions.get("window");
+  const logoSize = Math.min(screenW * 0.85, screenH * 0.45, 520);
 
   // useEffect(() => {
   //   const fetchMySharedPhotos = async () => {
@@ -48,15 +52,10 @@ const WelcomeScreen = () => {
     const fetchSharedPhotos = async () => {
       try {
         setIsLoading(true);
-        
-        // İnternet kontrolü
-        const isConnected = await checkInternetConnection();
-        if (!isConnected) {
-          showError("İnternet bağlantınızı kontrol edin");
-          return;
-        }
 
-        const response = await fetch(`${API_URL}/api/public/phone/share-photo`);
+        const response = await fetch(`${API_URL}/api/public/phone/share-photo`, {
+          timeout: 10000, // 10 saniye timeout
+        });
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -66,8 +65,8 @@ const WelcomeScreen = () => {
         setSharedPhotos(data.data);
       } catch (e) {
         console.error("Shared photos fetch error:", e);
-        const errorMessage = getErrorMessage(e);
-        showError(errorMessage);
+        // Sadece gerçek bir hata olduğunda göster, sessizce başarısız ol
+        // Kullanıcı deneyimini bozmamak için arka planda çalışsın
       } finally {
         setIsLoading(false);
       }
@@ -166,29 +165,37 @@ const WelcomeScreen = () => {
   };
 
   return (
-    <ImageBackground
-      source={require("../assets/welcome-bg.png")}
-      style={styles.background}
-    >
+    <View style={styles.background}>
       {/* Ayarlar Butonu */}
       <TouchableOpacity
-        style={styles.settingsButton}
+        style={[
+          styles.settingsButton,
+          { top: insets.top + 8, right: insets.right + 20 },
+        ]}
         onPress={() => navigation.navigate("Settings")}
       >
         <Ionicons name="settings-outline" size={28} color={COLORS.text} />
       </TouchableOpacity>
 
-      <SharedPhotos apiUrl={API_URL} />
+      <SharedPhotos apiUrl={API_URL} showFab={false} />
       {/* Sonsuz kayan fotoğraflar */}
       {renderInfiniteSlider()}
 
       <LinearGradient
-        colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]}
+        colors={["rgba(244,235,208,0.4)", "rgba(255,255,255,0.95)"]}
         style={styles.gradient}
       >
-        <View style={styles.container}>
+        <View
+          style={[
+            styles.container,
+            {
+              paddingTop: insets.top + 24,
+              paddingBottom: Math.max(insets.bottom, 16) + 24,
+            },
+          ]}
+        >
           <View style={styles.logoContainer}>
-            <AnimatedLogo width={550} height={550} />
+            <AnimatedLogo width={logoSize} height={logoSize} />
           </View>
           
           {/* Ana Butonlar */}
@@ -232,7 +239,7 @@ const WelcomeScreen = () => {
           </View>
         </View>
       </LinearGradient>
-    </ImageBackground>
+    </View>
   );
 };
 
@@ -241,11 +248,10 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     height: "100%",
+    backgroundColor: "#FFFFFF",
   },
   settingsButton: {
     position: "absolute",
-    top: 60,
-    right: 20,
     zIndex: 100,
     width: 44,
     height: 44,
@@ -269,7 +275,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 40,
   },
   logoContainer: {
     marginBottom: 30,
@@ -350,7 +355,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     flex: 1,
     borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    backgroundColor: "rgba(212, 175, 55, 0.08)",
     borderWidth: 2,
     borderColor: "#D4AF37",
     overflow: "hidden",
@@ -371,7 +376,7 @@ const styles = StyleSheet.create({
   secondaryButtonSubtext: {
     ...FONTS.regular,
     fontSize: 11,
-    color: "#FFF",
+    color: "#3A2A10",
     opacity: 0.8,
   },
   infoContainer: {
@@ -382,7 +387,7 @@ const styles = StyleSheet.create({
   infoText: {
     ...FONTS.regular,
     fontSize: 12,
-    color: "#FFF",
+    color: "#3A2A10",
     opacity: 0.85,
     textAlign: "center",
   },

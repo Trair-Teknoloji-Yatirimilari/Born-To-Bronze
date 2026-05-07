@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useCameraPermission } from "react-native-vision-camera";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../constants/theme";
 
 import {
@@ -27,6 +28,7 @@ import { ScrollView } from "react-native-gesture-handler";
 
 const OnboardingScreen = ({ navigation, onComplete }) => {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { hasPermission, requestPermission } = useCameraPermission();
 
   const [currentStep, setCurrentStep] = useState(ONBOARDING_STEPS.WELCOME);
@@ -273,10 +275,10 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
       <View style={styles.welcomeHeader}>
         <Image source={require("../assets/logo.png")} style={styles.welcomeLogo} />
         <Text style={styles.welcomeTitle}>
-          Eda Uygulamasına Hoş Geldiniz! ✨
+          Born To Bronze'a Hoş Geldiniz ✨
         </Text>
         <Text style={styles.welcomeSubtitle}>
-          Eda Taşpınar ürünlerini satın almadan önce test edin
+          Eda Taşpınar bronzlaştırıcı ürünlerini satın almadan önce sanal olarak test edin
         </Text>
       </View>
 
@@ -302,8 +304,8 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
       </View>
 
       <Text style={styles.welcomeDescription}>
-        Eda Taşpınar ürünlerinin sizde nasıl duracağını önceden görmek için
-        uygulamayı keşfedelim. Hangi krem sizin için ideal?
+        Eda Taşpınar bronzlaştırıcı ürünlerinin sizde nasıl duracağını önceden
+        görmek için uygulamayı keşfedelim. Hangi krem sizin için ideal?
       </Text>
     </Animated.View>
   );
@@ -317,7 +319,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
     >
       <Text style={styles.stepTitle}>🎨 İki Farklı Deneyim</Text>
       <Text style={styles.stepSubtitle}>
-        Eda Taşpınar ürünlerini test etmenin iki benzersiz yolu
+        Eda Taşpınar bronzlaştırıcı ürünlerini test etmenin iki benzersiz yolu
       </Text>
 
       <View style={styles.featuresGrid}>
@@ -371,7 +373,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
             <Text style={styles.featureCardTitle}>İndirim Kodu Kazanın</Text>
           </View>
           <Text style={styles.featureCardDescription}>
-            Sonuçlarınızı paylaşın, Eda'da indirim kazanın
+            Sonuçlarınızı paylaşın, Born To Bronze'da indirim kazanın
           </Text>
         </Animated.View>
       </View>
@@ -391,7 +393,8 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
 
       <Text style={styles.stepTitle}>Kamera İzni</Text>
       <Text style={styles.stepSubtitle}>
-        Eda Taşpınar ürünlerini yüzünüzde test etmek için kamera erişimi gerekli
+        Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde test etmek için kamera
+        erişimi gerekli
       </Text>
 
       <View style={styles.permissionBenefits}>
@@ -410,7 +413,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
         <View style={styles.permissionBenefit}>
           <Ionicons name="checkmark-circle" size={20} color={COLORS.text} />
           <Text style={styles.permissionBenefitText}>
-            Sonucu fotoğraflayıp Eda'da satın alın
+            Sonucu fotoğraflayıp Born To Bronze'da satın alın
           </Text>
         </View>
       </View>
@@ -438,7 +441,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
 
         <Text style={styles.stepTitle}>🚀 Nasıl Kullanılır?</Text>
         <Text style={styles.stepSubtitle}>
-          Eda Taşpınar ürünlerini test etmek çok kolay!
+          Eda Taşpınar bronzlaştırıcı ürünlerini test etmek çok kolay!
         </Text>
 
         <View style={styles.tutorialMethods}>
@@ -552,7 +555,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.text} />
       {/* Progress Bar */}
-      <View style={styles.progressContainer}>
+      <View style={[styles.progressContainer, { paddingTop: insets.top + 12 }]}>
         <View style={styles.progressBar}>
           <Animated.View
             style={[
@@ -576,7 +579,12 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
       <View style={styles.content}>{renderCurrentStep()}</View>
 
       {/* Navigation Buttons */}
-      <View style={styles.navigation}>
+      <View
+        style={[
+          styles.navigation,
+          { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+        ]}
+      >
         {currentStep !== ONBOARDING_STEPS.WELCOME && (
           <TouchableOpacity style={styles.backButton} onPress={handlePrevious}>
             <Ionicons name="chevron-back" size={20} color={COLORS.text} />
@@ -608,7 +616,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 60,
     paddingBottom: 20,
   },
   progressBar: {
@@ -871,7 +878,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 40,
   },
   backButton: {
     flexDirection: "row",

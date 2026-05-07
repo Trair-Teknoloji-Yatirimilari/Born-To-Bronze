@@ -3,6 +3,7 @@ import React from "react";
 import { StatusBar } from "expo-status-bar";
 import AppNavigator from "./src/navigation/AppNavigator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Sentry from "@sentry/react-native";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import { ToastProvider } from "./src/context/ToastContext";
@@ -35,13 +36,15 @@ Notifications.setNotificationHandler({
 
 export default Sentry.wrap(function App() {
   return (
-    <ToastProvider>
-      <NotificationProvider>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <StatusBar style="light" />
-          <AppNavigator />
-        </GestureHandlerRootView>
-      </NotificationProvider>
-    </ToastProvider>
+    <SafeAreaProvider>
+      <ToastProvider>
+        <NotificationProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <StatusBar style="auto" />
+            <AppNavigator />
+          </GestureHandlerRootView>
+        </NotificationProvider>
+      </ToastProvider>
+    </SafeAreaProvider>
   );
 });

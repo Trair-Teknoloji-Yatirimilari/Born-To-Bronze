@@ -168,7 +168,7 @@ export const getPermissionExplanation = (permissionType) => {
     camera: {
       title: "Kamera Erişimi",
       description:
-        "Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde gerçek zamanlı olarak test edebilmeniz için kamera erişimine ihtiyacımız var.",
+        "Born To Bronze uygulamasında Eda Taşpınar bronzlaştırıcı ürünlerini yüzünüzde gerçek zamanlı test edebilmeniz için kamera erişimi gereklidir.",
       privacy:
         "Kamera görüntüleri yalnızca cihazınızda işlenir ve sunucularımıza gönderilmez.",
       icon: "camera",
@@ -176,7 +176,7 @@ export const getPermissionExplanation = (permissionType) => {
     photoLibrary: {
       title: "Galeri Erişimi",
       description:
-        "Fotoğraflarınızı seçerek Eda Taşpınar bronzlaştırıcı ürünlerini test edebilmeniz için galeri erişimine ihtiyacımız var.",
+        "Born To Bronze uygulamasında fotoğraflarınızı seçerek Eda Taşpınar bronzlaştırıcı ürünlerini sanal olarak test edebilmeniz için galeri erişimi gereklidir.",
       privacy: "Seçtiğiniz fotoğraflar yalnızca cihazınızda işlenir.",
       icon: "images",
     },

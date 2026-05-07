@@ -37,6 +37,7 @@ import ViewShot from "react-native-view-shot";
 import * as FileSystem from "expo-file-system";
 import DeviceInfo from "react-native-device-info";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../constants/theme";
 import Share from "react-native-share";
 import Dialog from "../components/Dialog";
@@ -120,6 +121,8 @@ const getDeviceInfo = async () => {
 };
 
 function RealTimeScreen() {
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { hasPermission, requestPermission } = useCameraPermission();
   const [cameraFacing, setCameraFacing] = useState("front");
@@ -1227,10 +1230,10 @@ function RealTimeScreen() {
       </View>
 
       {/* Top Bar */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <LinearGradient
           colors={["rgba(0,0,0,0.7)", "transparent"]}
-          style={styles.topBarGradient}
+          style={[styles.topBarGradient, { height: insets.top + 100 }]}
         />
         <View style={styles.productHeader}>
           <Shimmer style={styles.topProductImage} />
@@ -1239,11 +1242,16 @@ function RealTimeScreen() {
             <Shimmer style={{ height: 14, width: 100 }} />
           </View>
         </View>
-        <Shimmer style={styles.helpButton} />
+        <Shimmer style={[styles.helpButton, { top: insets.top + 8 }]} />
       </View>
 
       {/* Bottom Container */}
-      <View style={styles.bottomContainer}>
+      <View
+        style={[
+          styles.bottomContainer,
+          { bottom: Math.max(insets.bottom, 16) + 104 },
+        ]}
+      >
         {/* Sol yan ürün */}
         <View style={styles.sideProduct}>
           <View style={styles.sideProductContainer}>
@@ -1422,7 +1430,7 @@ function RealTimeScreen() {
             ]}
           >
             {/* Product info header */}
-            <View style={styles.previewHeader}>
+            <View style={[styles.previewHeader, { top: insets.top + 12 }]}>
               <View style={styles.productBadge}>
                 <Image
                   source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
@@ -1448,7 +1456,12 @@ function RealTimeScreen() {
               )} */}
 
             {/* Action buttons */}
-            <View style={styles.previewActions}>
+            <View
+              style={[
+                styles.previewActions,
+                { bottom: Math.max(insets.bottom, 16) + 84 },
+              ]}
+            >
               <TouchableOpacity
                 style={[
                   styles.actionButton,
@@ -1611,11 +1624,20 @@ function RealTimeScreen() {
       {/* Tüm UI elementleri ViewShot'ın DIŞINDA - fotoğrafta görünmeyecek */}
 
       {/* Top UI Bar */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <LinearGradient
           colors={["rgba(0,0,0,0.7)", "transparent"]}
-          style={styles.topBarGradient}
+          style={[styles.topBarGradient, { height: insets.top + 100 }]}
         />
+        
+        {/* Geri Dönme Butonu */}
+        <TouchableOpacity
+          style={[styles.backButton, { top: insets.top + 8 }]}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+        </TouchableOpacity>
+
         <View style={styles.productHeader}>
           <Image
             source={{ uri: `${API_URL}${selectedProduct.imageUrl}` }}
@@ -1630,7 +1652,7 @@ function RealTimeScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.helpButton}
+          style={[styles.helpButton, { top: insets.top + 8 }]}
           onPress={() => setShowHelp(!showHelp)}
         >
           <Text style={styles.helpIcon}>?</Text>
@@ -1640,7 +1662,10 @@ function RealTimeScreen() {
       {/* Product info overlay */}
       {showHelp && (
         <Animated.View
-          style={[styles.productInfoOverlay, { opacity: fadeAnim }]}
+          style={[
+            styles.productInfoOverlay,
+            { top: insets.top + 80, opacity: fadeAnim },
+          ]}
         >
           <ScrollView style={{ flex: 1 }}>
             <View style={styles.productInfoHeader}>
@@ -1800,6 +1825,7 @@ function RealTimeScreen() {
           style={[
             styles.bottomContainer,
             {
+              bottom: Math.max(insets.bottom, 16) + 104,
               transform: [{ translateX: slideAnim }],
             },
           ]}
@@ -1974,7 +2000,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    paddingTop: 50,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
@@ -1985,10 +2010,27 @@ const styles = StyleSheet.create({
     right: 0,
     height: 120,
   },
+  backButton: {
+    position: "absolute",
+    left: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 20,
+  },
   productHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
+    marginLeft: 50, // Geri butonu için boşluk
   },
   topProductImage: {
     width: 40,
@@ -2015,7 +2057,6 @@ const styles = StyleSheet.create({
   },
   helpButton: {
     position: "absolute",
-    top: 50,
     right: 20,
     backgroundColor: "transparent",
     width: 30,
@@ -2238,7 +2279,6 @@ const styles = StyleSheet.create({
   // Bottom Container
   bottomContainer: {
     position: "absolute",
-    bottom: 120,
     left: 0,
     right: 0,
     flexDirection: "row",
@@ -2443,7 +2483,6 @@ const styles = StyleSheet.create({
   // Preview Screen Styles
   previewHeader: {
     position: "absolute",
-    top: 60,
     left: 20,
     right: 20,
     zIndex: 10,
@@ -2553,7 +2592,6 @@ const styles = StyleSheet.create({
   },
   previewActions: {
     position: "absolute",
-    bottom: 100,
     left: 30,
     right: 30,
     flexDirection: "row",

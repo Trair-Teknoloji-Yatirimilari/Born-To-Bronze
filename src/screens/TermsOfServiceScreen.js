@@ -7,12 +7,15 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../constants/theme";
 
 const TermsOfServiceScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -23,20 +26,24 @@ const TermsOfServiceScreen = ({ navigation }) => {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.lastUpdated}>Son Güncelleme: 1 Mayıs 2026</Text>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.lastUpdated}>Son Güncelleme: 7 Mayıs 2026</Text>
 
         <Text style={styles.sectionTitle}>1. Kabul ve Onay</Text>
         <Text style={styles.paragraph}>
-          Eda Taşpınar mobil uygulamasını ("Uygulama") kullanarak, bu kullanım
-          şartlarını okuduğunuzu, anladığınızı ve kabul ettiğinizi beyan
-          edersiniz. Bu şartları kabul etmiyorsanız, lütfen uygulamayı
+          Born To Bronze mobil uygulamasını ("Uygulama") kullanarak, bu
+          kullanım şartlarını okuduğunuzu, anladığınızı ve kabul ettiğinizi
+          beyan edersiniz. Bu şartları kabul etmiyorsanız, lütfen uygulamayı
           kullanmayın.
         </Text>
 
         <Text style={styles.sectionTitle}>2. Uygulama Hakkında</Text>
         <Text style={styles.paragraph}>
-          Eda Taşpınar uygulaması, Eda Taşpınar markasının bronzlaştırıcı
+          Born To Bronze uygulaması, Eda Taşpınar markasının bronzlaştırıcı
           ürünlerini satın almadan önce sanal olarak denemenizi sağlayan bir
           platformdur. Uygulama iki ana özellik sunar:
         </Text>
@@ -69,9 +76,11 @@ const TermsOfServiceScreen = ({ navigation }) => {
 
         <Text style={styles.sectionTitle}>4. Fikri Mülkiyet Hakları</Text>
         <Text style={styles.paragraph}>
-          Uygulama ve içeriği (tasarım, logo, metin, grafik, yazılım vb.) Eda
-          Taşpınar'ın mülkiyetindedir ve telif hakkı yasaları ile korunmaktadır.
-          İzinsiz kullanım, kopyalama veya dağıtım yasaktır.
+          Born To Bronze uygulamasının tasarımı, kodu ve arayüzü uygulama
+          sağlayıcısına aittir. Uygulamada tanıtılan bronzlaştırıcı ürünler ve
+          Eda Taşpınar markasına ait görsel/metin içerikler Eda Taşpınar
+          mülkiyetindedir ve telif hakkı yasaları ile korunmaktadır. İzinsiz
+          kullanım, kopyalama veya dağıtım yasaktır.
         </Text>
 
         <Text style={styles.sectionTitle}>5. Kullanıcı İçeriği</Text>
@@ -86,9 +95,7 @@ const TermsOfServiceScreen = ({ navigation }) => {
         <Text style={styles.bulletPoint}>
           • İçeriği sosyal medya ve diğer platformlarda yayınlama
         </Text>
-        <Text style={styles.bulletPoint}>
-          • İçeriği düzenleme ve uyarlama
-        </Text>
+        <Text style={styles.bulletPoint}>• İçeriği düzenleme ve uyarlama</Text>
         <Text style={styles.paragraph}>
           Not: Paylaşmadığınız içerikler yalnızca cihazınızda kalır ve bizimle
           paylaşılmaz.
@@ -133,31 +140,31 @@ const TermsOfServiceScreen = ({ navigation }) => {
         <Text style={styles.bulletPoint}>
           • Diğer kampanyalarla birleştirilemez
         </Text>
-        <Text style={styles.bulletPoint}>
-          • Nakit karşılığı yoktur
-        </Text>
+        <Text style={styles.bulletPoint}>• Nakit karşılığı yoktur</Text>
         <Text style={styles.bulletPoint}>
           • Eda Taşpınar tarafından iptal edilebilir
         </Text>
 
         <Text style={styles.sectionTitle}>9. Hesap Sonlandırma</Text>
         <Text style={styles.paragraph}>
-          Eda Taşpınar, bu kullanım şartlarını ihlal eden kullanıcıların hesaplarını
-          önceden bildirimde bulunmaksızın askıya alabilir veya sonlandırabilir.
+          Eda Taşpınar, bu kullanım şartlarını ihlal eden kullanıcıların
+          hesaplarını önceden bildirimde bulunmaksızın askıya alabilir veya
+          sonlandırabilir.
         </Text>
 
         <Text style={styles.sectionTitle}>10. Değişiklikler</Text>
         <Text style={styles.paragraph}>
-          Eda Taşpınar, bu kullanım şartlarını istediği zaman değiştirme hakkını
-          saklı tutar. Değişiklikler bu sayfada yayınlanacak ve "Son Güncelleme"
-          tarihi güncellenecektir. Önemli değişiklikler için uygulama içi
-          bildirim göndereceğiz.
+          Eda Taşpınar, bu kullanım şartlarını istediği zaman değiştirme
+          hakkını saklı tutar. Değişiklikler bu sayfada yayınlanacak ve "Son
+          Güncelleme" tarihi güncellenecektir. Önemli değişiklikler için
+          uygulama içi bildirim göndereceğiz.
         </Text>
 
         <Text style={styles.sectionTitle}>11. Uygulanacak Hukuk</Text>
         <Text style={styles.paragraph}>
-          Bu kullanım şartları Türkiye Cumhuriyeti yasalarına tabidir. Uygulamadan
-          kaynaklanan tüm uyuşmazlıklar İstanbul mahkemelerinde çözülecektir.
+          Bu kullanım şartları Türkiye Cumhuriyeti yasalarına tabidir.
+          Uygulamadan kaynaklanan tüm uyuşmazlıklar İstanbul mahkemelerinde
+          çözülecektir.
         </Text>
 
         <Text style={styles.sectionTitle}>12. İletişim</Text>
@@ -168,13 +175,14 @@ const TermsOfServiceScreen = ({ navigation }) => {
         <Text style={styles.bulletPoint}>
           • E-posta: info@edataspinar.com
         </Text>
-        <Text style={styles.bulletPoint}>
-          • Web: www.edataspinar.com
-        </Text>
+        <Text style={styles.bulletPoint}>• Web: www.edataspinar.com</Text>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             © 2026 Eda Taşpınar. Tüm hakları saklıdır.
+          </Text>
+          <Text style={styles.footerText}>
+            Born To Bronze — Eda Taşpınar'ın resmi uygulaması
           </Text>
         </View>
       </ScrollView>
@@ -192,8 +200,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.text + "20",
   },

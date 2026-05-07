@@ -7,13 +7,16 @@ import {
   TouchableOpacity,
   Alert,
   Linking,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../constants/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 
 const SettingsScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const [appVersion] = useState(Application.nativeApplicationVersion || "1.0.0");
 
   const handleResetAppData = () => {
@@ -69,7 +72,7 @@ const SettingsScreen = ({ navigation }) => {
         {
           text: "E-posta",
           onPress: () => {
-            Linking.openURL("mailto:info@edataspinar.com?subject=Eda Uygulama Destek");
+            Linking.openURL("mailto:info@edataspinar.com?subject=Born To Bronze Destek");
           },
         },
         {
@@ -98,7 +101,7 @@ const SettingsScreen = ({ navigation }) => {
   const handleShareApp = () => {
     Alert.alert(
       "Uygulamayı Paylaş",
-      "Eda Taşpınar uygulamasını arkadaşlarınızla paylaşın!",
+      "Born To Bronze uygulamasını arkadaşlarınızla paylaşın!",
       [
         {
           text: "Tamam",
@@ -133,7 +136,7 @@ const SettingsScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -146,6 +149,7 @@ const SettingsScreen = ({ navigation }) => {
 
       <ScrollView
         style={styles.content}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
         <SettingSection title="Yasal">
@@ -232,7 +236,7 @@ const SettingsScreen = ({ navigation }) => {
             © 2026 Eda Taşpınar
           </Text>
           <Text style={styles.footerText}>
-            Tüm hakları saklıdır
+            Born To Bronze — Tüm hakları saklıdır
           </Text>
         </View>
       </ScrollView>
@@ -250,8 +254,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.text + "20",
   },

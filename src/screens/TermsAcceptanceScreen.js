@@ -5,15 +5,16 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../constants/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const TERMS_ACCEPTED_KEY = "@terms_accepted";
 
 const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
+  const insets = useSafeAreaInsets();
   const [privacyChecked, setPrivacyChecked] = useState(false);
   const [termsChecked, setTermsChecked] = useState(false);
 
@@ -42,12 +43,15 @@ const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
     <View style={styles.container}>
       <ScrollView
         style={styles.content}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingTop: insets.top + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
           <Ionicons name="shield-checkmark" size={60} color={COLORS.text} />
-          <Text style={styles.title}>Hoş Geldiniz! 👋</Text>
+          <Text style={styles.title}>Hoş Geldiniz 👋</Text>
           <Text style={styles.subtitle}>
             Devam etmeden önce, lütfen gizlilik politikamızı ve kullanım
             şartlarımızı okuyup kabul edin.
@@ -57,9 +61,9 @@ const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
         <View style={styles.infoBox}>
           <Ionicons name="information-circle" size={24} color={COLORS.text} />
           <Text style={styles.infoText}>
-            Eda Taşpınar uygulaması, bronzlaştırıcı ürünleri sanal olarak test
-            etmenizi sağlar. Kamera ve fotoğraf verileriniz yalnızca cihazınızda
-            işlenir ve sunucularımıza gönderilmez.
+            Born To Bronze uygulaması, Eda Taşpınar bronzlaştırıcı ürünlerini
+            sanal olarak test etmenizi sağlar. Kamera ve fotoğraf verileriniz
+            yalnızca cihazınızda işlenir ve sunucularımıza gönderilmez.
           </Text>
         </View>
 
@@ -67,6 +71,7 @@ const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
           <TouchableOpacity
             style={styles.checkbox}
             onPress={() => setPrivacyChecked(!privacyChecked)}
+            activeOpacity={0.7}
           >
             <View
               style={[
@@ -75,15 +80,19 @@ const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
               ]}
             >
               {privacyChecked && (
-                <Ionicons name="checkmark" size={18} color={COLORS.background} />
+                <Ionicons
+                  name="checkmark"
+                  size={18}
+                  color={COLORS.background}
+                />
               )}
             </View>
             <View style={styles.checkboxTextContainer}>
               <Text style={styles.checkboxText}>
-                <TouchableOpacity onPress={openPrivacyPolicy}>
-                  <Text style={styles.link}>Gizlilik Politikasını</Text>
-                </TouchableOpacity>{" "}
-                okudum ve kabul ediyorum
+                <Text style={styles.link} onPress={openPrivacyPolicy}>
+                  Gizlilik Politikasını
+                </Text>
+                <Text> okudum ve kabul ediyorum</Text>
               </Text>
             </View>
           </TouchableOpacity>
@@ -91,6 +100,7 @@ const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
           <TouchableOpacity
             style={styles.checkbox}
             onPress={() => setTermsChecked(!termsChecked)}
+            activeOpacity={0.7}
           >
             <View
               style={[
@@ -99,15 +109,19 @@ const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
               ]}
             >
               {termsChecked && (
-                <Ionicons name="checkmark" size={18} color={COLORS.background} />
+                <Ionicons
+                  name="checkmark"
+                  size={18}
+                  color={COLORS.background}
+                />
               )}
             </View>
             <View style={styles.checkboxTextContainer}>
               <Text style={styles.checkboxText}>
-                <TouchableOpacity onPress={openTermsOfService}>
-                  <Text style={styles.link}>Kullanım Şartlarını</Text>
-                </TouchableOpacity>{" "}
-                okudum ve kabul ediyorum
+                <Text style={styles.link} onPress={openTermsOfService}>
+                  Kullanım Şartlarını
+                </Text>
+                <Text> okudum ve kabul ediyorum</Text>
               </Text>
             </View>
           </TouchableOpacity>
@@ -136,7 +150,12 @@ const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View
+        style={[
+          styles.footer,
+          { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.acceptButton,
@@ -144,12 +163,13 @@ const TermsAcceptanceScreen = ({ navigation, onAccept }) => {
           ]}
           onPress={handleAccept}
           disabled={!privacyChecked || !termsChecked}
+          activeOpacity={0.8}
         >
           <Text style={styles.acceptButtonText}>Kabul Et ve Devam Et</Text>
           <Ionicons name="arrow-forward" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.footerNote}>
-          Kabul ederek Eda Taşpınar uygulamasını kullanmaya başlayabilirsiniz
+          Kabul ederek Born To Bronze uygulamasını kullanmaya başlayabilirsiniz
         </Text>
       </View>
     </View>
@@ -166,7 +186,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingBottom: 20,
   },
   header: {
     alignItems: "center",
@@ -262,8 +282,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 20,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: COLORS.text + "20",
   },

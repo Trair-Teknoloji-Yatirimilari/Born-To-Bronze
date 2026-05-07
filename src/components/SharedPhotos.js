@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useImperativeHandle, useMemo, useState, forwardRef } from "react";
 import {
   View,
   Text,
@@ -82,7 +82,7 @@ const getDeviceInfo = async () => {
   }
 };
 
-export default function SharedPhotos({ apiUrl }) {
+export default forwardRef(function SharedPhotos({ apiUrl, showFab = true }, ref) {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [selectedImageUri, setSelectedImageUri] = useState(null);
@@ -262,21 +262,28 @@ export default function SharedPhotos({ apiUrl }) {
     setPendingDelete({ visible: false, photoId: null });
   };
 
+  useImperativeHandle(ref, () => ({
+    open: openModalAndFetch,
+    close: closeModal,
+  }));
+
   return (
     <>
-      {/* Sağ üst ikon buton */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={openModalAndFetch}
-        hitSlop={buttonHitSlop}
-        activeOpacity={0.85}
-      >
-        <Ionicons
-          name="share-social-outline"
-          size={28}
-          color={COLORS.background}
-        />
-      </TouchableOpacity>
+      {/* Sağ üst ikon buton — sadece showFab true iken */}
+      {showFab && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={openModalAndFetch}
+          hitSlop={buttonHitSlop}
+          activeOpacity={0.85}
+        >
+          <Ionicons
+            name="share-social-outline"
+            size={28}
+            color={COLORS.background}
+          />
+        </TouchableOpacity>
+      )}
 
       {/* Liste Modal */}
       <Modal visible={isModalVisible} transparent animationType="fade">
@@ -378,7 +385,7 @@ export default function SharedPhotos({ apiUrl }) {
       </Modal>
     </>
   );
-}
+});
 
 const styles = StyleSheet.create({
   fab: {

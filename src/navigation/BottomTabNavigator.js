@@ -1,10 +1,9 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform } from "react-native";
 import HomeScreen from "../screens/WelcomeScreen";
-import RealTimePreviewScreen from "../screens/RealTimeScreen";
 import EditAndPreviewScreen from "../screens/PhotoEditScreen";
+import SharedPhotosScreen from "../screens/SharedPhotosScreen";
 import { COLORS } from "../constants/theme";
 
 const Tab = createBottomTabNavigator();
@@ -18,10 +17,10 @@ const BottomTabNavigator = () => {
 
           if (route.name === "Ana Sayfa") {
             iconName = focused ? "home" : "home-outline";
-          } else if (route.name === "Gerçek Zamanlı Önizleme") {
-            iconName = focused ? "scan" : "scan-outline";
           } else if (route.name === "Düzenle ve Önizleme") {
             iconName = focused ? "sparkles" : "sparkles-outline";
+          } else if (route.name === "Paylaşımlarım") {
+            iconName = focused ? "share-social" : "share-social-outline";
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -51,20 +50,18 @@ const BottomTabNavigator = () => {
           tabBarLabel: "Ana Sayfa",
         }}
       />
-      {!Platform.OS === "android" && (
-        <Tab.Screen
-          name="Gerçek Zamanlı Önizleme"
-          component={RealTimePreviewScreen}
-          options={{
-            tabBarLabel: "Gerçek Zamanlı Önizleme",
-          }}
-        />
-      )}
       <Tab.Screen
         name="Düzenle ve Önizleme"
         component={EditAndPreviewScreen}
         options={{
           tabBarLabel: "Düzenle ve Önizleme",
+        }}
+      />
+      <Tab.Screen
+        name="Paylaşımlarım"
+        component={SharedPhotosScreen}
+        options={{
+          tabBarLabel: "Paylaşımlarım",
         }}
       />
     </Tab.Navigator>

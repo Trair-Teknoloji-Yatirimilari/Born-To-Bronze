@@ -7,12 +7,15 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../constants/theme";
 
 const PrivacyPolicyScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -23,15 +26,21 @@ const PrivacyPolicyScreen = ({ navigation }) => {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.lastUpdated}>Son Güncelleme: 1 Mayıs 2026</Text>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.lastUpdated}>Son Güncelleme: 7 Mayıs 2026</Text>
 
         <Text style={styles.sectionTitle}>1. Giriş</Text>
         <Text style={styles.paragraph}>
-          Eda Taşpınar mobil uygulaması ("Uygulama"), Eda Taşpınar markası
-          tarafından sunulmaktadır. Bu gizlilik politikası, Uygulamamızı
-          kullanırken kişisel verilerinizin nasıl toplandığını, kullanıldığını
-          ve korunduğunu açıklamaktadır.
+          Born To Bronze mobil uygulaması ("Uygulama"), Eda Taşpınar markasının
+          bronzlaştırıcı ürünlerini satın almadan önce cihazınızın kamerasıyla
+          veya galeri fotoğraflarıyla sanal olarak denemenizi sağlayan bir
+          uygulamadır. Bu gizlilik politikası, uygulamayı kullanırken kişisel
+          verilerinizin nasıl toplandığını, kullanıldığını, korunduğunu ve
+          saklandığını açıklar.
         </Text>
 
         <Text style={styles.sectionTitle}>2. Toplanan Bilgiler</Text>
@@ -58,8 +67,47 @@ const PrivacyPolicyScreen = ({ navigation }) => {
           hata raporları vb.).
         </Text>
 
-        <Text style={styles.sectionTitle}>3. Bilgilerin Kullanımı</Text>
-        <Text style={styles.paragraph}>Topladığımız bilgileri şu amaçlarla kullanırız:</Text>
+        <Text style={styles.sectionTitle}>3. Yüz Verilerinin İşlenmesi (Face Data)</Text>
+        <Text style={styles.paragraph}>
+          Born To Bronze, bronzlaştırma efektinin yalnızca cilt bölgelerine
+          (alın, yanak, çene) doğru uygulanması için cihaz üzerinde gerçek
+          zamanlı yüz kontur algılaması yapar. Aşağıdaki bilgiler Apple App
+          Store yönergeleri (5.1.1) ve KVKK gereği açıkça belirtilmiştir:
+        </Text>
+        <Text style={styles.bulletPoint}>
+          • <Text style={styles.bold}>Hangi yüz verileri toplanıyor?</Text>{"\n"}
+          Cihaz üzerinde çalışan Google ML Kit tarafından üretilen geçici
+          geometrik kontur noktaları (yüz çevresi, yanaklar, göz ve dudak
+          sınırları). Yüz tanıma ya da biyometrik kimlik oluşturan hiçbir veri
+          toplanmaz, üretilmez veya depolanmaz.
+        </Text>
+        <Text style={styles.bulletPoint}>
+          • <Text style={styles.bold}>Ne amaçla kullanılıyor?</Text>{"\n"}
+          Sanal bronzlaştırma renginin yalnızca cilt bölgelerine uygulanması ve
+          göz, kaş, ağız gibi alanların dışlanması için klipleme maskesi
+          oluşturmak amacıyla kullanılır.
+        </Text>
+        <Text style={styles.bulletPoint}>
+          • <Text style={styles.bold}>Üçüncü taraflarla paylaşılıyor mu?</Text>{"\n"}
+          Hayır. Yüz verileri hiçbir üçüncü tarafla paylaşılmaz, sunucularımıza
+          gönderilmez, yedeklenmez ve herhangi bir analiz/reklam sağlayıcıyla
+          paylaşılmaz.
+        </Text>
+        <Text style={styles.bulletPoint}>
+          • <Text style={styles.bold}>Ne kadar süre saklanıyor?</Text>{"\n"}
+          Yüz kontur verileri yalnızca tek bir kare süresince (tipik olarak 50
+          milisaniyeden az) bellekte tutulur ve efekt çizildikten hemen sonra
+          silinir. Kalıcı depolama yapılmaz.
+        </Text>
+        <Text style={styles.bulletPoint}>
+          • <Text style={styles.bold}>Nerede saklanıyor?</Text>{"\n"}
+          Hiçbir yerde saklanmaz. Tüm işlem cihaz üzerindedir (on-device).
+        </Text>
+
+        <Text style={styles.sectionTitle}>4. Bilgilerin Kullanımı</Text>
+        <Text style={styles.paragraph}>
+          Topladığımız bilgileri şu amaçlarla kullanırız:
+        </Text>
         <Text style={styles.bulletPoint}>
           • Bronzlaştırma filtresi ve fotoğraf düzenleme özelliklerini sağlamak
         </Text>
@@ -69,44 +117,43 @@ const PrivacyPolicyScreen = ({ navigation }) => {
         <Text style={styles.bulletPoint}>
           • Size özel kampanyalar ve ürün önerileri sunmak
         </Text>
-        <Text style={styles.bulletPoint}>
-          • Müşteri desteği sağlamak
-        </Text>
+        <Text style={styles.bulletPoint}>• Müşteri desteği sağlamak</Text>
 
-        <Text style={styles.sectionTitle}>4. Veri Güvenliği</Text>
+        <Text style={styles.sectionTitle}>5. Veri Güvenliği</Text>
         <Text style={styles.paragraph}>
           Kişisel verilerinizin güvenliği bizim için önceliklidir. Tüm veriler
-          şifrelenmiş bağlantılar üzerinden iletilir ve güvenli sunucularda
-          saklanır. Kamera ve fotoğraf verileri yalnızca cihazınızda işlenir ve
-          sunucularımıza yüklenmez.
+          TLS 1.2+ ile şifrelenmiş bağlantılar üzerinden iletilir ve güvenli
+          sunucularda saklanır. Kamera ve yüz kontur verileri yalnızca
+          cihazınızda işlenir ve sunucularımıza yüklenmez.
         </Text>
 
-        <Text style={styles.sectionTitle}>5. Üçüncü Taraf Hizmetler</Text>
+        <Text style={styles.sectionTitle}>6. Üçüncü Taraf Hizmetler</Text>
         <Text style={styles.paragraph}>
           Uygulamamız aşağıdaki üçüncü taraf hizmetlerini kullanmaktadır:
         </Text>
         <Text style={styles.bulletPoint}>
-          • Sentry: Hata izleme ve performans analizi için
+          • Sentry: Hata izleme ve performans analizi için (fotoğraf veya yüz
+          verisi gönderilmez)
         </Text>
         <Text style={styles.bulletPoint}>
-          • Expo: Uygulama geliştirme ve güncelleme altyapısı için
+          • Expo / EAS: Uygulama geliştirme ve güncelleme altyapısı için
         </Text>
-        <Text style={styles.paragraph}>
-          Bu hizmetler kendi gizlilik politikalarına tabidir ve verilerinizi
-          kendi politikaları doğrultusunda işlerler.
+        <Text style={styles.bulletPoint}>
+          • Google ML Kit (on-device): Cihaz üzerinde yüz kontur algılama için
+          (ağ bağlantısı kullanmaz)
         </Text>
 
-        <Text style={styles.sectionTitle}>6. Çocukların Gizliliği</Text>
+        <Text style={styles.sectionTitle}>7. Çocukların Gizliliği</Text>
         <Text style={styles.paragraph}>
           Uygulamamız 13 yaşın altındaki çocuklardan bilerek kişisel bilgi
           toplamaz. Eğer 13 yaşın altındaysanız, lütfen ebeveyn veya vasinizin
           izniyle uygulamayı kullanın.
         </Text>
 
-        <Text style={styles.sectionTitle}>7. Haklarınız</Text>
+        <Text style={styles.sectionTitle}>8. Haklarınız</Text>
         <Text style={styles.paragraph}>
-          KVKK (Kişisel Verilerin Korunması Kanunu) kapsamında aşağıdaki
-          haklara sahipsiniz:
+          KVKK (Kişisel Verilerin Korunması Kanunu) ve GDPR kapsamında
+          aşağıdaki haklara sahipsiniz:
         </Text>
         <Text style={styles.bulletPoint}>
           • Kişisel verilerinizin işlenip işlenmediğini öğrenme
@@ -121,26 +168,22 @@ const PrivacyPolicyScreen = ({ navigation }) => {
           • Kişisel verilerinizin düzeltilmesini isteme
         </Text>
 
-        <Text style={styles.sectionTitle}>8. Hesap Silme</Text>
+        <Text style={styles.sectionTitle}>9. Hesap Silme</Text>
         <Text style={styles.paragraph}>
-          Hesabınızı ve tüm verilerinizi silmek isterseniz, Ayarlar {">"} Hesap
-          Yönetimi {">"} Hesabı Sil seçeneğini kullanabilir veya
-          info@edataspinar.com adresine e-posta gönderebilirsiniz.
+          Hesabınızı ve tüm verilerinizi silmek isterseniz, Ayarlar {">"} Veri
+          Yönetimi {">"} Uygulama Verilerini Sıfırla seçeneğini kullanabilir
+          veya info@edataspinar.com adresine e-posta gönderebilirsiniz.
         </Text>
 
-        <Text style={styles.sectionTitle}>9. İletişim</Text>
+        <Text style={styles.sectionTitle}>10. İletişim</Text>
         <Text style={styles.paragraph}>
           Gizlilik politikamız hakkında sorularınız varsa, bizimle iletişime
           geçebilirsiniz:
         </Text>
-        <Text style={styles.bulletPoint}>
-          • E-posta: info@edataspinar.com
-        </Text>
-        <Text style={styles.bulletPoint}>
-          • Web: www.edataspinar.com
-        </Text>
+        <Text style={styles.bulletPoint}>• E-posta: info@edataspinar.com</Text>
+        <Text style={styles.bulletPoint}>• Web: www.edataspinar.com</Text>
 
-        <Text style={styles.sectionTitle}>10. Değişiklikler</Text>
+        <Text style={styles.sectionTitle}>11. Değişiklikler</Text>
         <Text style={styles.paragraph}>
           Bu gizlilik politikasını zaman zaman güncelleyebiliriz. Değişiklikler
           bu sayfada yayınlanacak ve "Son Güncelleme" tarihi güncellenecektir.
@@ -150,6 +193,9 @@ const PrivacyPolicyScreen = ({ navigation }) => {
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             © 2026 Eda Taşpınar. Tüm hakları saklıdır.
+          </Text>
+          <Text style={styles.footerText}>
+            Born To Bronze — Eda Taşpınar'ın resmi uygulaması
           </Text>
         </View>
       </ScrollView>
@@ -167,8 +213,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.text + "20",
   },
@@ -214,6 +259,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 8,
     paddingLeft: 10,
+  },
+  bold: {
+    fontWeight: "700",
   },
   footer: {
     alignItems: "center",
