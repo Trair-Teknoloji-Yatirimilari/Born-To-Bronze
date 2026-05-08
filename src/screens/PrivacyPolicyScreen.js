@@ -104,6 +104,22 @@ const PrivacyPolicyScreen = ({ navigation }) => {
           Hiçbir yerde saklanmaz. Tüm işlem cihaz üzerindedir (on-device).
         </Text>
 
+        <Text style={[styles.paragraph, { fontStyle: "italic", marginTop: 10 }]}>
+          Apple App Store inceleme ekibi için birebir alıntı:
+          {"\n"}
+          “Born To Bronze, canlı kamera önizlemesi veya kullanıcının seçtiği bir
+          fotoğraf üzerinde, yalnızca cihaz üzerinde gerçek zamanlı yüz kontur
+          tespiti gerçekleştirir. Bu amaçla Google ML Kit Yüz Algılama
+          kütüphanesinin yüz hatları, göz, kaş ve dudak bölgelerini temsil eden
+          2B (x, y) koordinatları kullanılır. Elde edilen koordinatlar yalnızca
+          geçici bellekte, tek bir kare süresince (yaklaşık 50 milisaniye)
+          bulunur ve bir sonraki karenin işlenmesiyle birlikte üzerine yazılır.
+          Bu veriler yalnızca bronzlaştırıcı filtrenin cilt bölgelerine
+          sınırlandırılması amacıyla kullanılır. Yüz verisi hiçbir üçüncü tarafa
+          aktarılmaz, sunucularımıza yüklenmez, diske yazılmaz ve herhangi bir
+          yedekleme veya analiz amacıyla saklanmaz.”
+        </Text>
+
         <Text style={styles.sectionTitle}>4. Bilgilerin Kullanımı</Text>
         <Text style={styles.paragraph}>
           Topladığımız bilgileri şu amaçlarla kullanırız:

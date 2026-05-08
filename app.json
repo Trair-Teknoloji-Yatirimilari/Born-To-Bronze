@@ -24,9 +24,13 @@
         "NSMicrophoneUsageDescription": "Born To Bronze mikrofon kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
         "NSFaceIDUsageDescription": "Born To Bronze Face ID kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
         "NSLocationWhenInUseUsageDescription": "Born To Bronze konum bilgisi kullanmaz. Bu izin yanlışlıkla isteniyorsa lütfen bize bildirin.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "https",
+          "http"
+        ]
       },
-      "buildNumber": "17"
+      "buildNumber": "19"
     },
     "android": {
       "adaptiveIcon": {

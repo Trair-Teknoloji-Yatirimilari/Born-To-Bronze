@@ -546,27 +546,15 @@ const PhotoEditScreen = () => {
     });
   };
 
-  // Hemen Satın Al fonksiyonu
-  const handlePurchase = async () => {
+  // Ürünü İncele fonksiyonu: uygulama içi ödeme yoktur, kullanıcıyı markanın web sitesine yönlendirir.
+  const handleViewProduct = () => {
     if (!selectedProduct || !selectedProduct.link) {
-      showAlert("Hata", "Lütfen önce bir ürün seçin.");
+      showAlert("Ürün bulunamadı", "Görüntülenecek ürün bilgisi yok. Lütfen bir ürün seçin.");
       return;
     }
-
-    try {
-      const supported = await Linking.canOpenURL(selectedProduct.link);
-      if (supported) {
-        // Dış link onayı
-        // Not: Onboarding kapsamı dışında; burada doğrudan yönlendirme vardı.
-        // Dialog ile onaylayarak açmayı tercih edeceğiz: bileşeni en alta ekledik.
-        setConfirmLinkVisible(true);
-      } else {
-        showAlert("Bağlantı Hatası", "Bu link açılamıyor: " + selectedProduct.link);
-      }
-    } catch (error) {
-      console.error("Link açılırken hata:", error);
-      showAlert("Hata", "Satın alma sayfası açılırken bir sorun oluştu.");
-    }
+    // Onay dialogunu doğrudan aç — canOpenURL bazı iOS sürümlerinde false dönüp
+    // butonun cevapsız kalmasına yol açabiliyor. Açma denemesini onay sonrasına bırakıyoruz.
+    setConfirmLinkVisible(true);
   };
 
   // Fırça boyutunu güncelleme fonksiyonu
@@ -1489,9 +1477,15 @@ const PhotoEditScreen = () => {
                   
                   <TouchableOpacity
                     style={[styles.resultButtons, styles.buyButton]}
-                    onPress={handlePurchase}
+                    onPress={handleViewProduct}
                   >
-                    <Text>Hemen Satın Al</Text>
+                    <Ionicons
+                      name="open-outline"
+                      size={18}
+                      color={COLORS.text}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.buttonText}>Ürünü İncele</Text>
                   </TouchableOpacity>
                 </View>
                 <Text
@@ -1798,17 +1792,24 @@ const PhotoEditScreen = () => {
       <Dialog
         visible={confirmLinkVisible}
         mode="dialog"
-        icon="link"
-        title="Dış Bağlantı"
-        message="Satın alma sayfası tarayıcıda açılacak. Devam etmek istiyor musunuz?"
+        icon="open-outline"
+        title="Ürün Sayfasını Aç"
+        message="Ürünün detayları tarayıcıda edataspinar.com üzerinde açılacak. Devam etmek istiyor musunuz?"
         confirmText="Devam Et"
         cancelText="Vazgeç"
         onClose={() => setConfirmLinkVisible(false)}
         onConfirm={async () => {
           setConfirmLinkVisible(false);
+          if (!selectedProduct?.link) {
+            showAlert("Bağlantı yok", "Bu ürün için görüntülenecek bir sayfa bulunamadı.");
+            return;
+          }
           try {
-            if (selectedProduct?.link) await Linking.openURL(selectedProduct.link);
-          } catch {}
+            await Linking.openURL(selectedProduct.link);
+          } catch (err) {
+            console.error("Linking.openURL hatası:", err);
+            showAlert("Bağlantı Açılamadı", "Ürün sayfası açılamadı. Lütfen daha sonra tekrar deneyin.");
+          }
         }}
       />
 
@@ -1866,13 +1867,24 @@ const PhotoEditScreen = () => {
                   style={styles.discountShopButton}
                   onPress={() => {
                     setDiscountModalVisible(false);
-                    if (selectedProduct?.link) {
-                      Linking.openURL(selectedProduct.link);
+                    if (!selectedProduct?.link) {
+                      showAlert(
+                        "Bağlantı yok",
+                        "Bu ürün için görüntülenecek bir sayfa bulunamadı."
+                      );
+                      return;
                     }
+                    Linking.openURL(selectedProduct.link).catch((err) => {
+                      console.error("Linking.openURL hatası:", err);
+                      showAlert(
+                        "Bağlantı Açılamadı",
+                        "Ürün sayfası açılamadı. Lütfen daha sonra tekrar deneyin."
+                      );
+                    });
                   }}
                 >
-                  <Ionicons name="cart" size={20} color="#FF8C00" />
-                  <Text style={styles.discountShopButtonText}>Alışverişe Başla</Text>
+                  <Ionicons name="open-outline" size={20} color="#FF8C00" />
+                  <Text style={styles.discountShopButtonText}>Ürünleri İncele</Text>
                 </TouchableOpacity>
               </View>
 

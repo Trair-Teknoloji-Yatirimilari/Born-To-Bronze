@@ -413,7 +413,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
         <View style={styles.permissionBenefit}>
           <Ionicons name="checkmark-circle" size={20} color={COLORS.text} />
           <Text style={styles.permissionBenefitText}>
-            Sonucu fotoğraflayıp Born To Bronze'da satın alın
+            Sonucu fotoğraflayıp edataspinar.com'da ürünü inceleyin
           </Text>
         </View>
       </View>

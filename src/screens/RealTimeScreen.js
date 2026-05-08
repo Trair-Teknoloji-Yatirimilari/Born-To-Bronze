@@ -879,28 +879,19 @@ function RealTimeScreen() {
     }
   }
 
-  function buyProduct() {
-    // const handlePurchase = async () => {
-    //   if (!selectedProduct || !selectedProduct.link) {
-    //     Alert.alert("Hata", "Lütfen önce bir ürün seçin!");
-    //     return;
-    //   }
-
-    //   try {
-    //     const supported = await Linking.canOpenURL(selectedProduct.link);
-    //     if (supported) {
-    //       await Linking.openURL(selectedProduct.link);
-    //     } else {
-    //       Alert.alert("Hata", "Bu link açılamıyor: " + selectedProduct.link);
-    //     }
-    //   } catch (error) {
-    //     console.error("Link açılırken hata:", error);
-    //     Alert.alert("Hata", "Satın alma sayfası açılırken hata oluştu.");
-    //   }
-    // };
-    if (selectedProduct.link) {
-      setConfirmLinkVisible(true);
+  function viewProduct() {
+    // Uygulama içi ödeme yok. Kullanıcı ürünün detayını görmek için markanın
+    // web sitesine (edataspinar.com) yönlendirilir. Her durumda bir geri
+    // bildirim göstermek için null/hata yolu ayrıca ele alınır.
+    if (!selectedProduct) {
+      showAlert("Ürün bulunamadı", "Görüntülenecek ürün bilgisi yok. Lütfen bir ürün seçin.");
+      return;
     }
+    if (!selectedProduct.link) {
+      showAlert("Bağlantı yok", "Bu ürün için görüntülenecek bir sayfa bulunamadı.");
+      return;
+    }
+    setConfirmLinkVisible(true);
   }
 
   function closePreview() {
@@ -1477,11 +1468,11 @@ function RealTimeScreen() {
 
               <TouchableOpacity
                 style={[styles.actionButton, styles.buyButton]}
-                onPress={buyProduct}
+                onPress={viewProduct}
                 disabled={isProcessingPhoto}
               >
-                <Ionicons name="cart" size={20} color={COLORS.text} />
-                <Text style={styles.actionButtonText}>Satın Al</Text>
+                <Ionicons name="open-outline" size={20} color={COLORS.text} />
+                <Text style={styles.actionButtonText}>Ürünü İncele</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1696,7 +1687,22 @@ function RealTimeScreen() {
             <View style={styles.productInfoActions}>
               <TouchableOpacity
                 style={styles.infoActionButton}
-                onPress={() => Linking.openURL(selectedProduct.link)}
+                onPress={() => {
+                  if (!selectedProduct?.link) {
+                    showAlert(
+                      "Bağlantı yok",
+                      "Bu ürün için görüntülenecek bir sayfa bulunamadı."
+                    );
+                    return;
+                  }
+                  Linking.openURL(selectedProduct.link).catch((err) => {
+                    console.error("Linking.openURL hatası:", err);
+                    showAlert(
+                      "Bağlantı Açılamadı",
+                      "Ürün sayfası açılamadı. Lütfen daha sonra tekrar deneyin."
+                    );
+                  });
+                }}
               >
                 <Text style={styles.infoActionText}>Sitede Keşfet</Text>
               </TouchableOpacity>
@@ -1975,16 +1981,23 @@ function RealTimeScreen() {
       <Dialog
         visible={confirmLinkVisible}
         mode="dialog"
-        icon="link"
-        title="Dış Bağlantı"
-        message="Satın alma sayfası tarayıcıda açılacak. Devam etmek istiyor musunuz?"
+        icon="open-outline"
+        title="Ürün Sayfasını Aç"
+        message="Ürünün detayları tarayıcıda edataspinar.com üzerinde açılacak. Devam etmek istiyor musunuz?"
         confirmText="Devam Et"
         cancelText="Vazgeç"
         onClose={() => setConfirmLinkVisible(false)}
         onConfirm={async () => {
           setConfirmLinkVisible(false);
-          if (selectedProduct?.link) {
-            try { await Linking.openURL(selectedProduct.link); } catch {}
+          if (!selectedProduct?.link) {
+            showAlert("Bağlantı yok", "Bu ürün için görüntülenecek bir sayfa bulunamadı.");
+            return;
+          }
+          try {
+            await Linking.openURL(selectedProduct.link);
+          } catch (err) {
+            console.error("Linking.openURL hatası:", err);
+            showAlert("Bağlantı Açılamadı", "Ürün sayfası açılamadı. Lütfen daha sonra tekrar deneyin.");
           }
         }}
       />
