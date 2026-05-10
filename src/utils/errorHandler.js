@@ -86,7 +86,7 @@ export const getErrorActions = (error) => {
   // İzin hatası varsa
   if (error.message?.includes("permission")) {
     actions.push({
-      label: "İzin Ver",
+      label: "Devam Et",
       action: "requestPermission",
     });
     actions.push({

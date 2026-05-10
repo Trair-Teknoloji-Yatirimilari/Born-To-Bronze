@@ -1597,16 +1597,16 @@ function RealTimeScreen() {
               colors={["#FF6B35", "#F7931E", "#FFD23F"]}
               style={StyleSheet.absoluteFill}
             />
-            <Text style={styles.permissionTitle}>🔒 Kamera İzni Gerekli</Text>
+            <Text style={styles.permissionTitle}>Kamera Erişimi</Text>
             <Text style={styles.permissionText}>
-              Bronzlaştırma filtresini kullanmak için kamera izni vermeniz
-              gerekmektedir.
+              Bronzlaştırma filtresini kullanabilmek için kamera erişimi
+              gereklidir.
             </Text>
             <TouchableOpacity
               style={styles.permissionButton}
               onPress={requestPermission}
             >
-              <Text style={styles.permissionButtonText}>İzin Ver</Text>
+              <Text style={styles.permissionButtonText}>Devam Et</Text>
             </TouchableOpacity>
           </View>
         )}

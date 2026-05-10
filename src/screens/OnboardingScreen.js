@@ -10,6 +10,7 @@ import {
   StatusBar,
   Alert,
   BackHandler,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useCameraPermission } from "react-native-vision-camera";
@@ -209,10 +210,15 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
         } else {
           Alert.alert(
             "Kamera İzni Gerekli",
-            "Bronzlaştırma filtresini kullanmak için kamera iznine ihtiyacımız var.",
+            "Bronzlaştırma filtresini kullanmak için kamera erişimi gereklidir. Ayarlar'dan izni etkinleştirebilirsiniz.",
             [
-              { text: "Daha Sonra", style: "cancel" },
-              { text: "Tekrar Dene", onPress: handlePermissionRequest },
+              { text: "Daha Sonra", style: "cancel", onPress: () => {
+                // İzin olmadan da devam edebilsin (fotoğraf düzenleme özelliği hâlâ çalışır)
+                markOnboardingMilestone(ONBOARDING_KEYS.PERMISSIONS_GRANTED);
+                setCurrentOnboardingStep(ONBOARDING_STEPS.TUTORIAL);
+                setCurrentStep(ONBOARDING_STEPS.TUTORIAL);
+              }},
+              { text: "Ayarlar", onPress: () => Linking.openURL("app-settings:") },
             ]
           );
           trackOnboardingEvent("permission_denied", { permission: "camera" });
@@ -543,7 +549,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
       case ONBOARDING_STEPS.FEATURES:
         return "Devam Et";
       case ONBOARDING_STEPS.PERMISSIONS:
-        return hasPermission ? "Devam Et" : "İzin Ver";
+        return "Devam Et";
       case ONBOARDING_STEPS.TUTORIAL:
         return "Uygulamayı Başlat";
       default:

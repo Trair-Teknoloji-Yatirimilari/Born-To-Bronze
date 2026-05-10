@@ -63,7 +63,7 @@ const PermissionRequest = ({
               style={[styles.button, styles.allowButton]}
               onPress={onAllow}
             >
-              <Text style={styles.allowButtonText}>İzin Ver</Text>
+              <Text style={styles.allowButtonText}>Devam Et</Text>
               <Ionicons name="arrow-forward" size={20} color={COLORS.text} />
             </TouchableOpacity>
           </View>
