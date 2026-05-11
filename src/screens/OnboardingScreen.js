@@ -250,24 +250,6 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
     }
   };
 
-  const handleSkip = () => {
-    Alert.alert(
-      "Tanıtımı Atla",
-      "Eda ürünlerini test etmeyi öğrenmek istemez misiniz?",
-      [
-        { text: "Öğrenmek İstiyorum", style: "cancel" },
-        {
-          text: "Atla",
-          style: "destructive",
-          onPress: () => {
-            trackOnboardingEvent("onboarding_skipped", { step: currentStep });
-            handleCompleteOnboarding();
-          },
-        },
-      ]
-    );
-  };
-
   const renderWelcomeStep = () => (
     <Animated.View
       style={[
@@ -576,9 +558,6 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
             ]}
           />
         </View>
-        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-          <Text style={styles.skipButtonText}>Atla</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Main Content */}
