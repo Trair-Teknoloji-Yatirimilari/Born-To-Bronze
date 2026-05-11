@@ -395,7 +395,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
         <View style={styles.permissionBenefit}>
           <Ionicons name="checkmark-circle" size={20} color={COLORS.text} />
           <Text style={styles.permissionBenefitText}>
-            Yüz tanıma ile hassas ürün uygulaması
+            Kamera ile canlı sanal bronzlaştırma
           </Text>
         </View>
         <View style={styles.permissionBenefit}>
@@ -570,7 +570,7 @@ const OnboardingScreen = ({ navigation, onComplete }) => {
           { paddingBottom: Math.max(insets.bottom, 16) + 16 },
         ]}
       >
-        {currentStep !== ONBOARDING_STEPS.WELCOME && (
+        {currentStep !== ONBOARDING_STEPS.WELCOME && currentStep !== ONBOARDING_STEPS.PERMISSIONS && (
           <TouchableOpacity style={styles.backButton} onPress={handlePrevious}>
             <Ionicons name="chevron-back" size={20} color={COLORS.text} />
             <Text style={styles.backButtonText}>Geri</Text>
